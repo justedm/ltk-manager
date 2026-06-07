@@ -7,19 +7,17 @@ import {
   FolderX,
   Info,
   Layers,
-  ShieldAlert,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
 import { twMerge } from "tailwind-merge";
 import { match } from "ts-pattern";
 
-import { Checkbox, Dialog, IconButton, Menu, Switch, Tooltip, useToast } from "@/components";
+import { Checkbox, IconButton, Menu, Switch, useToast } from "@/components";
 import type { InstalledMod, ModLayer } from "@/lib/tauri";
 import {
   useEnableModWithLayers,
   useMoveModToFolder,
-  useSkinhackFlag,
   useToggleMod,
   useUninstallMod,
 } from "@/modules/library/api";
@@ -55,14 +53,8 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
   const toggleSelection = useLibrarySelectionStore((s) => s.toggle);
   const selectRangeTo = useLibrarySelectionStore((s) => s.selectRangeTo);
 
-  const {
-    isFlagged,
-    reason: skinhackReason,
-    infoOpen: skinhackInfoOpen,
-    setInfoOpen: setSkinhackInfoOpen,
-  } = useSkinhackFlag(mod);
   const patcherRunning = patcherStatus?.running ?? false;
-  const disabled = isFlagged || patcherRunning;
+  const disabled = patcherRunning;
   const interactionsDisabled = disabled || selectMode;
   const isInUserFolder = mod.folderId != null && mod.folderId !== ROOT_FOLDER_ID;
   const isMultiLayer = mod.layers.length > 1;
@@ -122,13 +114,9 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
   }
 
   const inSelectedState = selectMode && isSelected;
-  const inEnabledState = mod.enabled && !isFlagged;
-  const isInteractive = !isFlagged && (selectMode || !disabled);
-
-  const cursorClass = match({ isFlagged, isInteractive })
-    .with({ isFlagged: true }, () => "cursor-default opacity-50")
-    .with({ isInteractive: true }, () => "cursor-pointer")
-    .otherwise(() => "cursor-default");
+  const inEnabledState = mod.enabled;
+  const isInteractive = selectMode || !disabled;
+  const cursorClass = isInteractive ? "cursor-pointer" : "cursor-default";
 
   if (viewMode === "list") {
     const stateClass = match({ isSelected: inSelectedState, isEnabled: inEnabledState })
@@ -184,11 +172,6 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <h3 className="truncate font-medium text-surface-100">{mod.displayName}</h3>
-            {isFlagged && (
-              <Tooltip content={skinhackReason}>
-                <ShieldAlert className="h-4 w-4 shrink-0 text-red-500" />
-              </Tooltip>
-            )}
           </div>
           <div className="flex items-center gap-1.5">
             <p className="truncate text-sm text-surface-500">
@@ -239,30 +222,18 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
             <Menu.Portal>
               <Menu.Positioner>
                 <Menu.Popup>
-                  {isFlagged && (
-                    <Menu.Item
-                      icon={<ShieldAlert className="h-4 w-4" />}
-                      onClick={() => setSkinhackInfoOpen(true)}
-                    >
-                      What is a skinhack?
-                    </Menu.Item>
-                  )}
-                  {!isFlagged && (
-                    <Menu.Item
-                      icon={<Info className="h-4 w-4" />}
-                      onClick={() => onViewDetails?.(mod)}
-                    >
-                      View Details
-                    </Menu.Item>
-                  )}
-                  {!isFlagged && (
-                    <Menu.Item
-                      icon={<Edit3 className="h-4 w-4" />}
-                      onClick={() => onEditMetadata?.(mod)}
-                    >
-                      Edit Metadata
-                    </Menu.Item>
-                  )}
+                  <Menu.Item
+                    icon={<Info className="h-4 w-4" />}
+                    onClick={() => onViewDetails?.(mod)}
+                  >
+                    View Details
+                  </Menu.Item>
+                  <Menu.Item
+                    icon={<Edit3 className="h-4 w-4" />}
+                    onClick={() => onEditMetadata?.(mod)}
+                  >
+                    Edit Metadata
+                  </Menu.Item>
                   <Menu.Item icon={<FolderOpen className="h-4 w-4" />} onClick={handleOpenLocation}>
                     Open Location
                   </Menu.Item>
@@ -293,7 +264,6 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
             </Menu.Portal>
           </Menu.Root>
         </div>
-        <SkinhackInfoDialog open={skinhackInfoOpen} onOpenChange={setSkinhackInfoOpen} />
       </div>
     );
   }
@@ -359,14 +329,6 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
         )}
       </div>
 
-      {isFlagged && (
-        <Tooltip content={skinhackReason}>
-          <div className="absolute top-2 left-2 z-10 rounded-md bg-red-500/90 p-1">
-            <ShieldAlert className="h-4 w-4 text-white" />
-          </div>
-        </Tooltip>
-      )}
-
       <div className="relative aspect-video overflow-hidden rounded-t-xl bg-linear-to-br from-surface-700 to-surface-800">
         {thumbnailUrl ? (
           <img src={thumbnailUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -382,7 +344,6 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
       <div className="flex flex-1 flex-col p-3">
         <div className="mb-1 flex items-center gap-1">
           <h3 className="line-clamp-1 text-sm font-medium text-surface-100">{mod.displayName}</h3>
-          {isFlagged && <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-red-500" />}
         </div>
 
         <div className="mb-1 flex min-h-5 items-center gap-1">
@@ -415,30 +376,18 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
               <Menu.Portal>
                 <Menu.Positioner>
                   <Menu.Popup>
-                    {isFlagged && (
-                      <Menu.Item
-                        icon={<ShieldAlert className="h-4 w-4" />}
-                        onClick={() => setSkinhackInfoOpen(true)}
-                      >
-                        What is a skinhack?
-                      </Menu.Item>
-                    )}
-                    {!isFlagged && (
-                      <Menu.Item
-                        icon={<Info className="h-4 w-4" />}
-                        onClick={() => onViewDetails?.(mod)}
-                      >
-                        View Details
-                      </Menu.Item>
-                    )}
-                    {!isFlagged && (
-                      <Menu.Item
-                        icon={<Edit3 className="h-4 w-4" />}
-                        onClick={() => onEditMetadata?.(mod)}
-                      >
-                        Edit Metadata
-                      </Menu.Item>
-                    )}
+                    <Menu.Item
+                      icon={<Info className="h-4 w-4" />}
+                      onClick={() => onViewDetails?.(mod)}
+                    >
+                      View Details
+                    </Menu.Item>
+                    <Menu.Item
+                      icon={<Edit3 className="h-4 w-4" />}
+                      onClick={() => onEditMetadata?.(mod)}
+                    >
+                      Edit Metadata
+                    </Menu.Item>
                     <Menu.Item
                       icon={<FolderOpen className="h-4 w-4" />}
                       onClick={handleOpenLocation}
@@ -474,43 +423,7 @@ export function ModCard({ mod, viewMode, onViewDetails, onEditMetadata }: ModCar
           </div>
         </div>
       </div>
-      <SkinhackInfoDialog open={skinhackInfoOpen} onOpenChange={setSkinhackInfoOpen} />
     </div>
-  );
-}
-
-function SkinhackInfoDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop />
-        <Dialog.Overlay size="sm">
-          <Dialog.Header>
-            <Dialog.Title>What is a skinhack?</Dialog.Title>
-            <Dialog.Close />
-          </Dialog.Header>
-          <Dialog.Body>
-            <p className="text-sm leading-relaxed text-surface-300">
-              A skinhack is a mod that grants access to paid League of Legends skins.
-            </p>
-            <p className="mt-3 text-sm leading-relaxed text-surface-300">
-              Using skinhacks violates the distribution policy and can put your account at risk. LTK
-              Manager blocks these mods to protect both users and the modding community.
-            </p>
-            <p className="mt-3 text-sm leading-relaxed text-surface-400">
-              If you believe this mod was flagged incorrectly, open an issue on the GitHub
-              repository page with the relevant info and we will investigate.
-            </p>
-          </Dialog.Body>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
   );
 }
 
