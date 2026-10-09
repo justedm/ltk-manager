@@ -19,7 +19,5 @@
   "patcher_rebuild_queue_action": "Rebuild on next start",
   "patcher_rebuild_queued_description": "The overlay is rebuilt from scratch when the patcher next starts.",
   "patcher_rebuild_queued_title": "Rebuild queued",
-  "patcher_skinhack_excluded_description": "{name} was detected as a skinhack and is not loaded.",
-  "patcher_skinhack_excluded_title": "Skinhack excluded",
   "patcher_start_failed_title": "Couldn't start the patcher"
 }

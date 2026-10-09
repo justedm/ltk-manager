@@ -104,12 +104,6 @@ pub struct Config {
     /// Enabling a mod moves it to the front of its folder. Off by default.
     #[serde(default)]
     pub promote_enabled_mods: bool,
-    /// Whether to enforce the anti-skinhack scan while patching. When on
-    /// (default), a champion WAD that fails the scan aborts patching. When off,
-    /// the `CSLOL_HOOK_OPT_OUT_AH_V1` hook flag is set so failures are
-    /// downgraded to warnings and flagged mods load anyway. Default: true.
-    #[serde(default = "default_true")]
-    pub enforce_skinhack_scan: bool,
     /// Whether mods' string overrides are applied to every installed locale
     /// instead of only the locale the League client is configured to use.
     /// Default: false (current locale only).
@@ -241,7 +235,6 @@ impl Default for Config {
             elevate_injector: false,
             auto_categorization_enabled: true,
             promote_enabled_mods: false,
-            enforce_skinhack_scan: true,
             apply_string_overrides_to_all_locales: false,
             verbose_patcher_logging: false,
             full_wad_scan: false,
@@ -271,7 +264,6 @@ mod tests {
         assert!(!config.elevate_injector);
         assert!(config.auto_categorization_enabled);
         assert!(!config.promote_enabled_mods);
-        assert!(config.enforce_skinhack_scan);
         assert!(!config.apply_string_overrides_to_all_locales);
         assert!(!config.verbose_patcher_logging);
         assert!(!config.full_wad_scan);
@@ -327,11 +319,23 @@ mod tests {
     }
 
     #[test]
+    fn a_config_with_the_removed_skinhack_setting_is_ignored() {
+        let config: Config = serde_json::from_str(r#"{ "enforceSkinhackScan": false }"#).unwrap();
+
+        assert!(config.league_path.is_none());
+        assert!(
+            serde_json::to_value(config)
+                .unwrap()
+                .get("enforceSkinhackScan")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn config_deserializes_from_empty_object() {
         let config: Config = serde_json::from_str("{}").unwrap();
         assert!(config.league_path.is_none());
         assert!(config.block_scripts_wad);
-        assert!(config.enforce_skinhack_scan);
     }
 
     /// Settings files written before this flag existed have to come back on,

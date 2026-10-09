@@ -1,7 +1,6 @@
-import { ShieldWarningIcon } from "@phosphor-icons/react";
 import { match } from "ts-pattern";
 
-import { Checkbox, Tooltip } from "@/components";
+import { Checkbox } from "@/components";
 import { m } from "@/i18n";
 import { SuspectBadge } from "@/modules/diagnostics";
 import { twMerge } from "@/utils";
@@ -14,7 +13,6 @@ import {
   ModCardMenu,
   ModCardThumbnail,
   ModPills,
-  SkinhackInfoDialog,
 } from "./ModCardParts";
 import type { ModCardView } from "./useModCardController";
 
@@ -22,17 +20,10 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
   const {
     mod,
     thumbnailUrl,
-    isFlagged,
-    skinhackReason,
     isMultiLayer,
     hasSelection,
     isSelected,
     inEnabledState,
-    blocked,
-    isInteractive,
-    cursorClass,
-    skinhackInfoOpen,
-    setSkinhackInfoOpen,
     onCardClick,
     onCardKeyDown,
     onSelectionToggle,
@@ -60,15 +51,8 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
         "edge-lit hover:[--edge-lit-color:var(--accent-hover)] hover:[--edge-lit-reach:60%] hover:[--edge-lit-fill:var(--surface-800)] hover:-translate-y-px hover:shadow-md",
     );
 
-  /* Most of a library is switched on, so off is the state worth marking and the
-     card recedes rather than the enabled one shouting. It also takes the accent
-     out of a disabled card's pills, which were competing with the lit edge for
-     the one hue that means enabled.
-
-     A blocked mod is not off - it cannot be used at all - and `cursorClass`
-     already dims it. Dimming it again as though it were merely switched off
-     would file a broken mod under a state the reader chose. */
-  const dimClass = !inEnabledState && !isSelected && !blocked ? "opacity-60 saturate-50" : "";
+  /* Most of a library is switched on, so off is the state worth marking. */
+  const dimClass = !inEnabledState && !isSelected ? "opacity-60 saturate-50" : "";
 
   /* Faded rather than absent, so tabbing to it still reaches a control. It is
      out of the corner's flow and the marks slide off it instead, or a card with
@@ -87,15 +71,14 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
       onClick={onCardClick}
       onKeyDown={onCardKeyDown}
       role="button"
-      tabIndex={isInteractive ? 0 : -1}
+      tabIndex={0}
       aria-pressed={mod.enabled}
       aria-label={mod.displayName}
       className={twMerge(
-        "sculpted-card group group/reveal relative flex h-full flex-col overflow-hidden rounded-xl border-2 shadow-concave transition-[translate,box-shadow,background-color,border-color,opacity,filter,--edge-lit-fill] duration-150 ease-out select-none",
+        "sculpted-card group group/reveal relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border-2 shadow-concave transition-[translate,box-shadow,background-color,border-color,opacity,filter,--edge-lit-fill] duration-150 ease-out select-none",
         "focus-visible:ring-2 focus-visible:ring-accent-300 focus-visible:outline-none",
         "hover:opacity-100 hover:saturate-100",
         dimClass,
-        cursorClass,
         stateClass,
       )}
     />
@@ -125,13 +108,6 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
             marksShift,
           )}
         >
-          {isFlagged && (
-            <Tooltip content={skinhackReason}>
-              <div className="rounded-md bg-danger/90 p-1">
-                <ShieldWarningIcon className="size-4 text-brand-on" />
-              </div>
-            </Tooltip>
-          )}
           {/* A ground under the marks' own fill, so they read over cover art:
               DS-GLASS. `empty:hidden` keeps a mod with neither from spending a
               gap on the marks it does not draw. */}
@@ -176,7 +152,6 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
           <h3 className="min-w-0 truncate text-sm font-medium text-surface-100 select-text">
             {mod.displayName}
           </h3>
-          {isFlagged && <ShieldWarningIcon className="size-3.5 shrink-0 text-danger-text" />}
         </div>
 
         <div className="flex items-center text-xs text-surface-500">
@@ -191,13 +166,12 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
             than hanging each set under a title of its own length. */}
         <div className="mt-auto flex items-center gap-1">
           <ModPills mod={mod} max={3} />
-          {isMultiLayer && <LayerPopover mod={mod} disabled={view.disabled} />}
+          {isMultiLayer && <LayerPopover mod={mod} />}
           <span data-no-toggle onClick={(e) => e.stopPropagation()}>
             <MissingDepsBadge modId={mod.id} enabled={mod.enabled} />
           </span>
         </div>
       </div>
-      <SkinhackInfoDialog open={skinhackInfoOpen} onOpenChange={setSkinhackInfoOpen} />
     </ModCardContextMenu>
   );
 }

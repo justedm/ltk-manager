@@ -12,7 +12,7 @@ import type { InstalledMod } from "@/lib/tauri";
 import { twMerge } from "@/utils";
 
 import type { RowDensity } from "../../state";
-import { ModCardContextMenu, SkinhackInfoDialog } from "../ModCard/ModCardParts";
+import { ModCardContextMenu } from "../ModCard/ModCardParts";
 import { useModCardController } from "../ModCard/useModCardController";
 import type { TableColumnSpec } from "./columns";
 
@@ -72,7 +72,6 @@ export const ModTableRow = memo(function ModTableRow({
   useEffect(() => {
     register(rowKey, () => {
       const current = viewRef.current;
-      if (current.disabled) return;
       current.onToggle(current.mod.id, !current.mod.enabled);
     });
     return () => register(rowKey, null);
@@ -83,9 +82,7 @@ export const ModTableRow = memo(function ModTableRow({
     onPress(event, rowKey, mod.id);
   }
 
-  /* An off mod recedes the way its grid card does, and a blocked one is
-     dimmed by `cursorClass` already. */
-  const recedes = !view.inEnabledState && !view.isSelected && !view.blocked;
+  const recedes = !view.inEnabledState && !view.isSelected;
 
   const row = (
     <div
@@ -102,11 +99,10 @@ export const ModTableRow = memo(function ModTableRow({
         gridTemplateColumns: "var(--table-cols)",
       }}
       className={twMerge(
-        "group/row group/reveal absolute inset-x-0 top-0 grid items-stretch py-px text-row text-surface-400 select-none",
+        "group/row group/reveal absolute inset-x-0 top-0 grid cursor-pointer items-stretch py-px text-row text-surface-400 select-none",
         joinTop && "pt-0",
         joinBottom && "pb-0",
         tableRowFillClass(isCurrent, view.isSelected),
-        view.cursorClass,
         isDragged && "opacity-40",
       )}
     />
@@ -133,7 +129,6 @@ export const ModTableRow = memo(function ModTableRow({
         );
       })}
       {isCurrent && <ArrangedCurrentRing className="inset-x-0 inset-y-px" />}
-      <SkinhackInfoDialog open={view.skinhackInfoOpen} onOpenChange={view.setSkinhackInfoOpen} />
     </ModCardContextMenu>
   );
 });

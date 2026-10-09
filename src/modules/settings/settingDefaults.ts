@@ -105,7 +105,6 @@ const SETTING_FORMAT: Partial<Record<SettingKey, SettingFormat>> = {
   patchTft: onOff,
   elevateInjector: onOff,
   blockScriptsWad: onOff,
-  enforceSkinhackScan: onOff,
   linkedBinCheckEnabled: onOff,
   fullWadScan: onOff,
   verbosePatcherLogging: onOff,

@@ -26,23 +26,12 @@ describe("useSetModsEnabled", () => {
     expect(asked()).toEqual([{ modId: "off", enabled: true }]);
   });
 
-  /* A card refuses the same press one mod at a time, and a set is not a way
-     around it. */
-  it("does not switch on a blocked mod", () => {
+  it("switches on a mod regardless of its author metadata", () => {
     toggle.mutate.mockClear();
-    const mods = [createMockInstalledMod({ id: "hack", enabled: false, authors: ["rose"] })];
+    const mods = [createMockInstalledMod({ id: "mod", enabled: false, authors: ["rose"] })];
 
     setEnabled()(mods, true);
 
-    expect(asked()).toEqual([]);
-  });
-
-  it("still switches a blocked mod off", () => {
-    toggle.mutate.mockClear();
-    const mods = [createMockInstalledMod({ id: "hack", enabled: true, authors: ["rose"] })];
-
-    setEnabled()(mods, false);
-
-    expect(asked()).toEqual([{ modId: "hack", enabled: false }]);
+    expect(asked()).toEqual([{ modId: "mod", enabled: true }]);
   });
 });

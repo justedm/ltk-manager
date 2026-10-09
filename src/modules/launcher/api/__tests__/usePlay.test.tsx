@@ -7,10 +7,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ToastProvider } from "@/components";
 import type { LaunchRoute, PatcherPhase } from "@/lib/tauri";
-import { useInstalledMods } from "@/modules/library";
 import { usePendingRebuildStore, usePlaySessionStore } from "@/stores";
 import { commandNames } from "@/test/commandNames";
-import { createMockInstalledMod, createMockSettings } from "@/test/fixtures";
+import { createMockSettings } from "@/test/fixtures";
 import { mockInvoke } from "@/test/mocks/tauri";
 import { createTestQueryClient } from "@/test/utils";
 
@@ -25,16 +24,8 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * `useGuardedStartPatcher` reads the installed mods to filter skinhacks, and
- * treats an empty list as "nothing to apply" - so a play issued before the
- * library query settles would no-op for a reason unrelated to what these tests
- * are about. Every case waits for the library first.
- */
-async function renderPlay() {
-  const view = renderHook(() => ({ play: usePlay(), mods: useInstalledMods() }), { wrapper });
-  await waitFor(() => expect(view.result.current.mods.isSuccess).toBe(true));
-  return view;
+function renderPlay() {
+  return renderHook(() => ({ play: usePlay() }), { wrapper });
 }
 
 /**
@@ -57,8 +48,6 @@ function mockBackend(
           ok: true,
           value: createMockSettings({ hasSeenHddWarning: true }),
         });
-      case commandNames.library.getInstalledMods:
-        return Promise.resolve({ ok: true, value: [createMockInstalledMod({ enabled: true })] });
       case commandNames.patcher.startPatcher:
         return Promise.resolve({ ok: true, value: null });
       case commandNames.patcher.getPatcherStatus: {
@@ -94,7 +83,7 @@ describe("usePlay", () => {
   it("forces the rebuild a verdict queued, once", async () => {
     mockBackend(["patching"]);
     usePendingRebuildStore.setState({ queued: true });
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -107,7 +96,7 @@ describe("usePlay", () => {
 
   it("arms the patcher before asking the Riot Client to launch", async () => {
     mockBackend(["patching"]);
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -125,7 +114,7 @@ describe("usePlay", () => {
   /// start an unmodded game while the user believes their mods are on.
   it("does not launch when the overlay build fails", async () => {
     mockBackend(["building", "idle"]);
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -139,7 +128,7 @@ describe("usePlay", () => {
   /// myself" and "I want the game without mods" path.
   it("launchOnly starts no patcher", async () => {
     mockBackend(["idle"]);
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.launchOnly();
@@ -151,7 +140,7 @@ describe("usePlay", () => {
 
   it("keeps the patcher when League is already running", async () => {
     mockBackend(["patching"], "ALREADY_RUNNING");
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -163,7 +152,7 @@ describe("usePlay", () => {
 
   it("launchOnly says when there was nothing to launch", async () => {
     mockBackend(["idle"], "ALREADY_RUNNING");
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.launchOnly();
@@ -174,7 +163,7 @@ describe("usePlay", () => {
 
   it("launchOnly says the manager is following a game it adopted", async () => {
     mockBackend(["idle"], "ADOPTED", "irnZWC1kOMt");
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.launchOnly();
@@ -188,7 +177,7 @@ describe("usePlay", () => {
   /// game existed. It now waits on the session the outcome named.
   it("hands the run to the session the launch named", async () => {
     mockBackend(["patching"], "EXISTING_CLIENT", "irnZWC1kOMt");
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -206,7 +195,7 @@ describe("usePlay", () => {
   /// exist, so a launch without one settles here instead.
   it("ends the run where there is no session to follow", async () => {
     mockBackend(["patching"]);
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await result.current.play.play();
@@ -222,7 +211,7 @@ describe("usePlay", () => {
   /// not reach it in the first place.
   it("ignores a second play while one is already running", async () => {
     mockBackend(["patching"]);
-    const { result } = await renderPlay();
+    const { result } = renderPlay();
 
     await act(async () => {
       await Promise.all([result.current.play.play(), result.current.play.play()]);

@@ -1,4 +1,3 @@
-import { ShieldWarningIcon } from "@phosphor-icons/react";
 import { format, formatDistanceToNow } from "date-fns";
 import { type ComponentType, use } from "react";
 
@@ -8,7 +7,6 @@ import {
   PickContext,
   ROW_HEIGHT,
   THUMB_SIZE,
-  Tooltip,
 } from "@/components";
 import { m } from "@/i18n";
 import { SuspectBadge } from "@/modules/diagnostics";
@@ -116,20 +114,13 @@ function ArtCell({ view, density }: CellProps) {
 
 function NameCell({ view }: CellProps) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span
-        className={twMerge(
-          "truncate text-sm font-medium",
-          view.inEnabledState ? "text-surface-100" : "text-surface-200",
-        )}
-      >
-        {view.mod.displayName}
-      </span>
-      {view.isFlagged && (
-        <Tooltip content={view.skinhackReason}>
-          <ShieldWarningIcon className="size-4 shrink-0 text-danger-text" />
-        </Tooltip>
+    <span
+      className={twMerge(
+        "truncate text-sm font-medium",
+        view.inEnabledState ? "text-surface-100" : "text-surface-200",
       )}
+    >
+      {view.mod.displayName}
     </span>
   );
 }
@@ -162,7 +153,7 @@ function LayersCell({ view }: CellProps) {
 
   return (
     <span {...stop} className="flex">
-      <LayerPopover mod={view.mod} disabled={view.disabled} />
+      <LayerPopover mod={view.mod} />
     </span>
   );
 }

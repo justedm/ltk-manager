@@ -177,7 +177,6 @@ label sits over a block either way.
   | Block Scripts.wad.client  (r)           ( ) |
   |  ! Modding allows running Lua scripts.      |  <- an alert belongs to the row that raised it
   | Warn about missing dependencies  (r)    ( ) |
-  | Enforce anti-skinhack scan              (O) |
   | ------------------------------------------- |
   | INCIDENTS                                   |
   | Allow reading game logs                 (O) |
@@ -856,7 +855,7 @@ Card `Patching`:
 | Group         | Rows                                                                                  |
 | ------------- | ------------------------------------------------------------------------------------- |
 | Injector      | Patch TFT files, Run injector elevated, Verbose patcher logging                       |
-| Mod safety    | Block Scripts.wad.client, Warn about missing dependencies, Enforce anti-skinhack scan |
+| Mod safety    | Block Scripts.wad.client, Warn about missing dependencies                            |
 | Game archives | Scan every WAD up front, Disable crash reporting                                      |
 | Incidents     | Allow reading game logs, Keep incidents                                               |
 

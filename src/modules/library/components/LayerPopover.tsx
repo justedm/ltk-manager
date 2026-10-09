@@ -8,10 +8,9 @@ import { LayerToggleList } from "./LayerToggleList";
 
 interface LayerPopoverProps {
   mod: InstalledMod;
-  disabled?: boolean;
 }
 
-export function LayerPopover({ mod, disabled }: LayerPopoverProps) {
+export function LayerPopover({ mod }: LayerPopoverProps) {
   const setModLayers = useSetModLayers();
 
   if (mod.layers.length <= 1) return null;
@@ -34,7 +33,7 @@ export function LayerPopover({ mod, disabled }: LayerPopoverProps) {
       <Popover.Root>
         <Popover.Trigger
           render={
-            <Button size="xs" disabled={disabled} left={<Layers className="size-3.5" />}>
+            <Button size="xs" left={<Layers className="size-3.5" />}>
               {enabledCount}/{mod.layers.length}
             </Button>
           }
@@ -52,7 +51,6 @@ export function LayerPopover({ mod, disabled }: LayerPopoverProps) {
           <LayerToggleList
             layers={mod.layers}
             onToggle={handleToggle}
-            disabled={disabled}
             className="rounded-b-lg"
           />
         </Popover.Content>

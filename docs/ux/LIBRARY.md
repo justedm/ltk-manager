@@ -64,7 +64,6 @@ The status words are the ones [Problems](PROJECT_PROBLEMS.md#feature-status) def
 | The details tab        | Available | One mod's cover, facts, layers, WAD footprint and edit form   |
 | The readme tab         | Available | One mod's readme, opened from that card's menu                |
 | The licenses tab       | Available | One mod's license name, its link, and the text it ships       |
-| Skinhack blocklist     | Available | Retiring into a Problems rule over the project manifest       |
 | Marquee selection      | Proposed  | Competes with drag-to-reorder for the same press              |
 | Folder moves on a pick | Available | Move to folder, on the bar and on a mod's menu                |
 | Rebuild library        | Available | On the page for an index that a newer version wrote           |
@@ -86,10 +85,6 @@ redraws the range from the same anchor, so it moves the far end rather than addi
 and the picks made before the range began stay picked. With no anchor to range from, the
 shift-click picks the one card under the pointer.
 
-**A picked mod that cannot be switched on is still picked.** A blocked mod refuses a bare press,
-and uninstalling it is the reason to reach for it in the first place, so the modifier gestures
-stay open where the switch is closed.
-
 **The checkbox is the way in without the modifier.** It draws on the card under the pointer, and
 on every card while the selection is non-empty. A press on it adds or removes that one card. The
 grid draws it in the card's top-left corner, over the art, and the table draws it at the head of
@@ -105,7 +100,7 @@ Six commands, and the same six wherever they are drawn:
 
 | Command         | What it does                                                     |
 | --------------- | ---------------------------------------------------------------- |
-| Enable N        | Switches on every picked mod that is off and not blocked         |
+| Enable N        | Switches on every picked mod that is off                         |
 | Disable N       | Switches off every picked mod that is on                         |
 | Move to folder  | Files the picks into a folder, out of every folder, or a new one |
 | Check health N  | Runs the [health](MOD_HEALTH.md) rules over the picks            |
@@ -116,10 +111,6 @@ Six commands, and the same six wherever they are drawn:
 the first two are pressed in pairs, so the set a reader assembled survives the press. Check health spends it as the press
 lands, because the run reports through its own progress toast and answers over the library.
 Uninstall spends it when the run comes back, which is what lets the failures stay picked.
-
-**A blocked mod is skipped by Enable.** A card refuses that press one mod at a time, and a set is
-not a way around it. Disable is always offered, and Uninstall is the reason the mod is pickable
-at all.
 
 **Every command stays on while the patcher runs.** Enable, Disable and Uninstall reach the
 running session as [An edit while the patcher runs](#an-edit-while-the-patcher-runs) describes.
@@ -395,7 +386,7 @@ session, like the filters.
 drawn where a column can show it. The dock already follows the pointer, so a press spent on
 showing a mod would do nothing the hover had not. The press also makes the row the current row,
 and Space switches the current row from the keyboard. Ctrl-click and shift-click pick exactly as
-they do on a card, and a blocked mod refuses the bare press the way its card does.
+they do on a card.
 
 **The current row is the dock's mod.** It is drawn tinted, and the keyboard moves from it. Arrow
 keys, Page Up and Page Down, Home and End move it. Left and Right collapse and expand a group
@@ -480,7 +471,6 @@ and names a new one, and it is the keyboard's way to file a mod.
 | ----------------------------------------------- | ---------------------------------------------------------- |
 | Is there a mode to enter before picking?        | No. Ctrl-click and shift-click are the whole way in        |
 | What does a bare click do under a selection?    | Switches that mod, as it always does                       |
-| Can a blocked mod be picked?                    | Yes. Uninstalling it is the reason to                      |
 | Does the checkbox draw with nothing picked?     | Yes, on the card under the pointer                         |
 | Is there a marquee?                             | No. It competes with drag-to-reorder for one press         |
 | What does a bare press do in the table?         | Switches the mod and makes the row current, not the anchor |

@@ -7,11 +7,10 @@ import { twMerge } from "@/utils";
 interface LayerToggleListProps {
   layers: ModLayer[];
   onToggle: (layerName: string, enabled: boolean) => void;
-  disabled?: boolean;
   className?: string;
 }
 
-export function LayerToggleList({ layers, onToggle, disabled, className }: LayerToggleListProps) {
+export function LayerToggleList({ layers, onToggle, className }: LayerToggleListProps) {
   const sorted = [...layers].sort((a, b) => a.priority - b.priority);
 
   return (
@@ -41,10 +40,10 @@ export function LayerToggleList({ layers, onToggle, disabled, className }: Layer
         return (
           <div
             key={layer.name}
-            onClick={() => !disabled && onToggle(layer.name, !layer.enabled)}
+            onClick={() => onToggle(layer.name, !layer.enabled)}
             className={twMerge(
               "flex border-collapse items-center border-y border-surface-700 bg-surface-800/50 px-3 py-2 select-none",
-              !disabled && "cursor-pointer hover:border-surface-600 hover:bg-surface-800",
+              "cursor-pointer hover:border-surface-600 hover:bg-surface-800",
               "last:rounded-b-md last:border-b-0",
             )}
           >
@@ -52,7 +51,6 @@ export function LayerToggleList({ layers, onToggle, disabled, className }: Layer
             <Checkbox
               size="sm"
               checked={layer.enabled}
-              disabled={disabled}
               tabIndex={-1}
               className="pointer-events-none"
             />

@@ -1,14 +1,7 @@
-import { match } from "ts-pattern";
-
 import { useToast } from "@/components";
 import { errorSummary } from "@/i18n";
 import { api, type InstalledMod, type ModStorage } from "@/lib/tauri";
-import {
-  useSetModStorage,
-  useSkinhackFlag,
-  useToggleMod,
-  useUninstallMod,
-} from "@/modules/library/api";
+import { useSetModStorage, useToggleMod, useUninstallMod } from "@/modules/library/api";
 import { useModThumbnail } from "@/modules/library/api/useModThumbnail";
 
 import { useLibrarySelectionStore } from "../../state";
@@ -22,15 +15,13 @@ export interface ModCardProps {
 
 /**
  * View-model returned by {@link useModCardController}. Holds the derived display
- * flags, the UI state shared across the card root, toggle, menu, and dialog, and
+ * flags, the UI state shared across the card root, toggle, and menu, and
  * the bound action handlers. The grid/list layouts and their leaf parts render
  * purely off this object.
  */
 export interface ModCardView {
   mod: InstalledMod;
   thumbnailUrl: string | undefined;
-  isFlagged: boolean;
-  skinhackReason: string;
   /**
    * Whether this mod can be moved between the two storage modes at all.
    *
@@ -47,19 +38,11 @@ export interface ModCardView {
    */
   canCheckHealth: boolean;
   storageChangePending: boolean;
-  /** Whether the mod cannot be switched, because it is blocked or the patcher owns the library. */
-  disabled: boolean;
   isMultiLayer: boolean;
   /** Whether anything at all is picked, which is what draws every card's checkbox. */
   hasSelection: boolean;
   isSelected: boolean;
   inEnabledState: boolean;
-  /** Whether the mod cannot be used at all, which is not the same as being off. */
-  blocked: boolean;
-  isInteractive: boolean;
-  cursorClass: string;
-  skinhackInfoOpen: boolean;
-  setSkinhackInfoOpen: (open: boolean) => void;
   onCardClick: (e: React.MouseEvent) => void;
   onCardKeyDown: (e: React.KeyboardEvent) => void;
   onSelectionToggle: () => void;
@@ -72,7 +55,7 @@ export interface ModCardView {
 
 /**
  * Owns all of a mod card's interaction logic and the UI state that must be shared
- * between the card body, toggle control, context menu, and skinhack dialog
+ * between the card body, toggle control, and context menu.
  */
 export function useModCardController({ mod }: ModCardProps): ModCardView {
   const { data: thumbnailUrl } = useModThumbnail(mod.id);
@@ -86,14 +69,6 @@ export function useModCardController({ mod }: ModCardProps): ModCardView {
   const toggleSelection = useLibrarySelectionStore((s) => s.toggle);
   const selectRangeTo = useLibrarySelectionStore((s) => s.selectRangeTo);
 
-  const {
-    isFlagged,
-    reason: skinhackReason,
-    infoOpen: skinhackInfoOpen,
-    setInfoOpen: setSkinhackInfoOpen,
-  } = useSkinhackFlag(mod);
-
-  const disabled = isFlagged;
   const isMultiLayer = mod.layers.length > 1;
 
   // "Legacy is transient": ADR-0008.
@@ -139,12 +114,7 @@ export function useModCardController({ mod }: ModCardProps): ModCardView {
     }
   }
 
-  /**
-   * The card's own gesture: a modifier picks, and a bare press switches the mod.
-   *
-   * Selecting is open to a mod that cannot be switched on, because uninstalling
-   * it is the reason to reach for the checkbox in the first place.
-   */
+  /** The card's own gesture: a modifier picks, and a bare press switches the mod. */
   function activateCard(e: Modifiers) {
     if (e.shiftKey) {
       selectRangeTo(mod.id);
@@ -154,7 +124,6 @@ export function useModCardController({ mod }: ModCardProps): ModCardView {
       toggleSelection(mod.id);
       return;
     }
-    if (disabled) return;
     handleToggle(mod.id, !mod.enabled);
   }
 
@@ -170,33 +139,18 @@ export function useModCardController({ mod }: ModCardProps): ModCardView {
     activateCard(e);
   }
 
-  const blocked = isFlagged;
-  const inEnabledState = mod.enabled && !blocked;
-  const isInteractive = !blocked && !disabled;
-
-  const cursorClass = match({ blocked, isInteractive })
-    .with({ blocked: true }, () => "cursor-default opacity-50")
-    .with({ isInteractive: true }, () => "cursor-pointer")
-    .otherwise(() => "cursor-default");
+  const inEnabledState = mod.enabled;
 
   return {
     mod,
     thumbnailUrl,
-    isFlagged,
-    skinhackReason,
     canChangeStorage,
     canCheckHealth,
     storageChangePending: setModStorage.isPending,
-    disabled,
     isMultiLayer,
     hasSelection,
     isSelected,
     inEnabledState,
-    blocked,
-    isInteractive,
-    cursorClass,
-    skinhackInfoOpen,
-    setSkinhackInfoOpen,
     onCardClick: handleCardClick,
     onCardKeyDown: handleCardKeyDown,
     onSelectionToggle: () => toggleSelection(mod.id),

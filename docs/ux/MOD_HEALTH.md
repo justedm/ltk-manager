@@ -59,7 +59,6 @@ This table holds every major feature of Mod health. A status word has one meanin
 | The launch ask        | Available | Play confirms under itself when a broken mod is enabled                                |
 | Verdict pruning       | Available | A sweep forgets the verdicts of mods the library dropped                               |
 | The full findings     | Planned   | Behind a disclosure, for the user who wants the detail                                 |
-| One health surface    | Proposed  | The skinhack and missing-deps warnings join the badge                                  |
 
 ## The verdict
 

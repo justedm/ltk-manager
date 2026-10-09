@@ -579,7 +579,7 @@ The rows are in precedence order. The first row whose evidence is present wins.
 | Wrong League install       | A log whose `-GameBaseDir` is not the configured install                                             | game-stopped    | No          |
 | DLL injection failure      | A build error, or `InjectionFailed` at either stage                                                  | overlay-off     | Sometimes   |
 | Unsupported game build     | `end of life reached` on the `dll` lines                                                             | overlay-off     | No          |
-| Skinhack detection         | `patcher-wad-scan-failed`, status `c0000229`                                                         | overlay-off     | Yes         |
+| Legacy Skinhack detection  | Stored `patcher-wad-scan-failed`, status `c0000229`                                                   | overlay-off     | Yes         |
 | Archive scan rejection     | `patcher-wad-scan-failed`, any other status                                                          | overlay-off     | Yes         |
 | Overlay verification fail. | `overlay verification failed`, with its archive                                                      | overlay-off     | Yes         |
 | No mods applied            | A game the session or the host saw, and no live overlay in it                                        | overlay-off     | No          |
@@ -649,6 +649,9 @@ memory, `mod_wad` a base skin with a mesh missing, which reads as an incomplete 
 than a skinhack, and `base_wad` the game's own copy of the archive, where no mod is at
 fault. `base_skin` is what `mod_wad` was called before, and reads the same so a history
 written by an older DLL survives the update.
+
+The patcher no longer enables blocking skinhack enforcement. The dedicated status remains so
+incidents written by earlier builds keep their original classification and guidance.
 
 The backend classifies and stops there. It records the status, the token behind it and how
 many archives the scan rejected, and leaves the verdict's cause empty, so the words are
@@ -781,9 +784,8 @@ cannot ship without saying what it costs, and every verdict carries one.
 The first two cost the player everything they asked for and take `danger`. The last two cost
 part of it and take `warning`.
 
-A skinhack rejection is the case the axis exists for. The DLL's own scan rejected the archive
-and turned the overlay off, so `overlay-off` is a fact about what the manager did, and no
-reading of a log code enters into it.
+A stored skinhack rejection is a legacy case. The manager now opts out of blocking enforcement,
+but keeps the verdict kind so older incidents retain their original consequence.
 
 **Suspects carry no grade.** The `because` sentence is the whole claim, and how direct the
 link is reads out of what it says - _writes Aatrox.wad.client, which holds the path_ is not
@@ -823,7 +825,7 @@ sentence, and a stored code this build does not know reads as nothing. Neither i
 | `start-first`        | Start the patcher first           | The DLL joined too late                                                   |
 | `copy-report`        | Copy the report                   | An ending without a reason, or a scan status without a name               |
 | `disable-suspect`    | Disable the suspect               | Missing data, in a library game                                           |
-| `remove-skinhack`    | Disable the mod the scan named    | A skinhack rejection                                                      |
+| `remove-skinhack`    | Disable the mod the scan named    | A stored legacy skinhack rejection                                        |
 | `reimport-mod`       | Re-import the mod the scan named  | A missing bin, a corrupt archive, or an incomplete base skin              |
 | `repair-game`        | Repair the install                | The scan objected to a file the game ships                                |
 | `elevate`            | Let the host elevate              | The DLL never attached, and the host was not elevated                     |

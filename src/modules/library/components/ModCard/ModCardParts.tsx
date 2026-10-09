@@ -8,7 +8,6 @@ import {
   HeartbeatIcon,
   InfoIcon,
   PackageIcon,
-  ShieldWarningIcon,
   SpinnerGapIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
@@ -20,7 +19,6 @@ import {
   type CategoryTone,
   Chip,
   ContextMenu,
-  Dialog,
   IconButton,
   Menu,
   Switch,
@@ -131,7 +129,6 @@ export function ModCardToggle({ view }: { view: ModCardView }) {
 
   return (
     <Switch
-      disabled={view.disabled}
       checked={mod.enabled}
       onCheckedChange={(checked) => view.onToggle(mod.id, checked)}
       aria-label={label}
@@ -252,19 +249,11 @@ export function ModCardContextMenu({
  * different commands.
  */
 function ModCardMenuItems({ view }: { view: ModCardView }) {
-  const { mod, isFlagged, canChangeStorage, canCheckHealth } = view;
+  const { mod, canChangeStorage, canCheckHealth } = view;
 
   return (
     <>
-      {isFlagged && (
-        <Menu.Item
-          icon={<ShieldWarningIcon className="size-4" weight="bold" />}
-          onClick={() => view.setSkinhackInfoOpen(true)}
-        >
-          {m.library_mod_skinhack_action()}
-        </Menu.Item>
-      )}
-      {!isFlagged && <ModCardDetailsItem modId={mod.id} />}
+      <ModCardDetailsItem modId={mod.id} />
       <ModCardReadmeItem modId={mod.id} />
       <Menu.Item
         icon={<FolderOpenIcon className="size-4" weight="bold" />}
@@ -553,31 +542,3 @@ export function ModPills({
   );
 }
 
-export function SkinhackInfoDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Dialog.Shell
-      open={open}
-      onClose={() => onOpenChange(false)}
-      title={m.library_mod_skinhack_title()}
-      size="sm"
-    >
-      <Dialog.Body>
-        <p className="text-sm leading-relaxed text-surface-300">
-          {m.library_mod_skinhack_description()}
-        </p>
-        <p className="text-sm leading-relaxed text-surface-300">
-          {m.library_mod_skinhack_policy_hint()}
-        </p>
-        <p className="text-sm leading-relaxed text-surface-400">
-          {m.library_mod_skinhack_report_hint()}
-        </p>
-      </Dialog.Body>
-    </Dialog.Shell>
-  );
-}

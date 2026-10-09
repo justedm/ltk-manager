@@ -11,7 +11,6 @@ import { mockInvoke } from "@/test/mocks/tauri";
 import { useModCardController } from "../useModCardController";
 
 const toast = { toast: vi.fn(), success: vi.fn(), error: vi.fn(), task: vi.fn() };
-const skinhackFlag = { isFlagged: false, reason: "", infoOpen: false, setInfoOpen: vi.fn() };
 const setModStorage = { mutate: vi.fn(), isPending: false };
 const noopMutation = { mutate: vi.fn(), isPending: false };
 
@@ -22,7 +21,6 @@ vi.mock("@/modules/library/api", () => ({
   useSetModStorage: () => setModStorage,
   useToggleMod: () => noopMutation,
   useUninstallMod: () => noopMutation,
-  useSkinhackFlag: () => skinhackFlag,
 }));
 
 vi.mock("@/modules/library/api/useModThumbnail", () => ({
@@ -64,7 +62,6 @@ function click(modifiers: Partial<Record<"ctrlKey" | "metaKey" | "shiftKey", boo
 beforeEach(() => {
   vi.clearAllMocks();
   setModStorage.isPending = false;
-  skinhackFlag.isFlagged = false;
   // The store is a shared object rather than a fresh mock, so a test that picks
   // a mod has to hand it back.
   selectionState.selectedIds = new Set<string>();
@@ -228,14 +225,14 @@ describe("useModCardController gestures", () => {
     expect(noopMutation.mutate).not.toHaveBeenCalled();
   });
 
-  /* Uninstalling it is the reason to reach for the checkbox on a blocked mod,
-     so a pick is open where the switch is not. */
-  it("picks a mod that cannot be switched on", () => {
-    skinhackFlag.isFlagged = true;
-    const view = mount(createMockInstalledMod({ id: "a" }));
+  it("switches a mod regardless of its author metadata", () => {
+    const view = mount(createMockInstalledMod({ id: "a", enabled: false, authors: ["rose"] }));
 
-    act(() => view.current.onCardClick(click({ ctrlKey: true })));
+    act(() => view.current.onCardClick(click()));
 
-    expect(selectionState.toggle).toHaveBeenCalledWith("a");
+    expect(noopMutation.mutate).toHaveBeenCalledWith(
+      { modId: "a", enabled: true },
+      expect.anything(),
+    );
   });
 });

@@ -84,19 +84,6 @@ export function PatchingSection() {
             hint="Shown as a badge on each affected mod, plus a one-time warning when you start the patcher."
             control={<SettingSwitch setting="linkedBinCheckEnabled" />}
           />
-
-          <SettingRow
-            setting="enforceSkinhackScan"
-            description="Scans modded files for skinhacks and aborts patching if any are found."
-            hint="Temporary. It goes away once third-party mod managers have adapted to the new anti-skinhack requirements."
-            control={<SettingSwitch setting="enforceSkinhackScan" />}
-          />
-
-          {!settings.enforceSkinhackScan && (
-            <AlertBox tone="warning">
-              Enforcement is off, so mods flagged as skinhacks will load.
-            </AlertBox>
-          )}
         </SettingGroup>
 
         <SettingGroup id="patching.game-archives" title="Game archives">

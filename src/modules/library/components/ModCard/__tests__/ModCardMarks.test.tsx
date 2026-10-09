@@ -25,28 +25,19 @@ vi.mock("../ModCardParts", () => ({
   ModCardThumbnail: () => null,
   ModCardToggle: () => null,
   ModPills: () => null,
-  SkinhackInfoDialog: () => null,
 }));
 
 function view(): ModCardView {
   return {
     mod: createMockInstalledMod(),
     thumbnailUrl: undefined,
-    isFlagged: false,
-    skinhackReason: "",
     canChangeStorage: false,
     canCheckHealth: true,
     storageChangePending: false,
-    disabled: false,
     isMultiLayer: false,
     hasSelection: false,
     isSelected: false,
     inEnabledState: true,
-    blocked: false,
-    isInteractive: true,
-    cursorClass: "",
-    skinhackInfoOpen: false,
-    setSkinhackInfoOpen: vi.fn(),
     onCardClick: vi.fn(),
     onCardKeyDown: vi.fn(),
     onSelectionToggle: vi.fn(),

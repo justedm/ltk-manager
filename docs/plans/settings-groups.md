@@ -195,7 +195,7 @@ too: `Startup and tray` runs full width once it has groups, which leaves `Import
 column, so the tab goes single-column and `Import` runs wide with the rest. Workshop keeps the grid.
 
 The alert boxes move with the rows that raised them: the elevation warning into `Injector`, the
-scripts and skinhack warnings into `Mod safety`.
+scripts warning into `Mod safety`.
 
 ### 2.6 Copy
 

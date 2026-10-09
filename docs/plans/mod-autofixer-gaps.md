@@ -1631,10 +1631,9 @@ three specimens.
 **Evidence.** One `Ziggs.wad.client` chunk inside a Sett mod. Two map-WAD chunks inside a Kaisa
 mod. Both measured.
 
-**Detected today.** No. `skinhackCheck.ts` (`src/modules/library/utils/skinhackCheck.ts:1-31`)
-is an author and description blocklist, pure string matching against two names, and the runtime
-`ScanStatus::Skinhack` (`crates/ltk-manager-runtime/src/diagnostics/incident.rs:1110-1129`) is the
-game's own scan reported after a crash. Neither inspects content.
+**Detected today.** No. The former author-and-description blocklist is removed. Runtime
+`ScanStatus::Skinhack` (`crates/ltk-manager-runtime/src/diagnostics/incident.rs`) remains a
+diagnostic classification for scanner reports. Neither inspects mod content.
 
 **Repairable.** Nothing to repair — `route_targets` already sends the Ziggs chunk into
 `Ziggs.wad.client`, and `wad-reports.json` records that it did. The value is entirely in the

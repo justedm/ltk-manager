@@ -1,7 +1,6 @@
-import { ShieldWarningIcon } from "@phosphor-icons/react";
 import { match } from "ts-pattern";
 
-import { Checkbox, Tooltip } from "@/components";
+import { Checkbox } from "@/components";
 import { SuspectBadge } from "@/modules/diagnostics";
 import { twMerge } from "@/utils";
 
@@ -14,7 +13,6 @@ import {
   ModCardThumbnail,
   ModCardToggle,
   ModPills,
-  SkinhackInfoDialog,
 } from "./ModCardParts";
 import type { ModCardView } from "./useModCardController";
 
@@ -22,16 +20,10 @@ export function ModCardList({ view }: { view: ModCardView }) {
   const {
     mod,
     thumbnailUrl,
-    isFlagged,
-    skinhackReason,
     isMultiLayer,
     hasSelection,
     isSelected,
     inEnabledState,
-    blocked,
-    cursorClass,
-    skinhackInfoOpen,
-    setSkinhackInfoOpen,
     onCardClick,
     onSelectionToggle,
   } = view;
@@ -40,7 +32,7 @@ export function ModCardList({ view }: { view: ModCardView }) {
     .with({ isSelected: true }, () => "border-accent-500 bg-surface-800 ring-2 ring-accent-400/60")
     /* The same three answers the row below gives a pointer. Enabled had only
        the 1px lift, which is nothing to see once it eases instead of jumping,
-       and the dim coming off is what a disabled row was answering with. */
+      and the dim coming off is what an off row was answering with. */
     .with(
       { isEnabled: true },
       () =>
@@ -51,13 +43,8 @@ export function ModCardList({ view }: { view: ModCardView }) {
         "border-surface-700 bg-surface-900 hover:-translate-y-px hover:border-accent-hover hover:bg-surface-800/80 hover:shadow-md",
     );
 
-  /* Lighter than the grid's, because a row carries a switch and does not need
-     the recede to be what says the mod is off. It is here for the same reason
-     the grid has it: an off row's pills stop competing for the accent.
-
-     A blocked mod is dimmed by `cursorClass` already, and being unusable is not
-     the same as being switched off. */
-  const dimClass = !inEnabledState && !isSelected && !blocked ? "opacity-75 saturate-75" : "";
+  /* An off row's pills stop competing for the accent. */
+  const dimClass = !inEnabledState && !isSelected ? "opacity-75 saturate-75" : "";
 
   /* Laid out at all times, so the row does not reflow as a pointer crosses it. */
   const checkboxClass = hasSelection
@@ -70,10 +57,9 @@ export function ModCardList({ view }: { view: ModCardView }) {
     <div
       onClick={onCardClick}
       className={twMerge(
-        "group flex items-center gap-4 rounded-lg border p-4 transition-[translate,box-shadow,background-color,border-color,opacity,filter] duration-150 ease-out",
+        "group flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-[translate,box-shadow,background-color,border-color,opacity,filter] duration-150 ease-out",
         "hover:opacity-100 hover:saturate-100",
         dimClass,
-        cursorClass,
         stateClass,
       )}
     />
@@ -103,18 +89,13 @@ export function ModCardList({ view }: { view: ModCardView }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <h3 className="truncate font-medium text-surface-100">{mod.displayName}</h3>
-          {isFlagged && (
-            <Tooltip content={skinhackReason}>
-              <ShieldWarningIcon className="size-4 shrink-0 text-danger-text" />
-            </Tooltip>
-          )}
         </div>
         <div className="flex items-center gap-1.5">
           <p className="truncate text-sm text-surface-500">
             v{mod.version} • {mod.authors.join(", ") || "Unknown author"}
           </p>
           <ModPills mod={mod} max={3} />
-          {isMultiLayer && <LayerPopover mod={mod} disabled={view.disabled} />}
+          {isMultiLayer && <LayerPopover mod={mod} />}
           <span data-no-toggle onClick={(e) => e.stopPropagation()}>
             <MissingDepsBadge modId={mod.id} enabled={mod.enabled} />
           </span>
@@ -152,7 +133,6 @@ export function ModCardList({ view }: { view: ModCardView }) {
       >
         <ModCardMenu view={view} />
       </div>
-      <SkinhackInfoDialog open={skinhackInfoOpen} onOpenChange={setSkinhackInfoOpen} />
     </ModCardContextMenu>
   );
 }

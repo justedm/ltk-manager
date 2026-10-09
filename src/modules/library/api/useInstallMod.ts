@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components";
 import { m } from "@/i18n";
 import { api, type AppError, type InstalledMod, type InstallOutcome } from "@/lib/tauri";
-import { checkModForSkinhack } from "@/modules/library/utils/skinhackCheck";
 import { unwrapForQuery } from "@/utils/query";
 
 import { libraryKeys } from "./keys";
@@ -38,15 +37,6 @@ export function useInstallMod() {
       } else {
         queryClient.setQueryData<InstalledMod[]>(libraryKeys.mods(), (old) =>
           old ? [mod, ...old] : [mod],
-        );
-      }
-
-      const flag = checkModForSkinhack(mod);
-      if (flag) {
-        api.toggleMod(mod.id, false);
-        toast.warning(
-          m.library_install_skinhack_title(),
-          m.library_install_skinhack_description({ name: mod.displayName }),
         );
       }
     },

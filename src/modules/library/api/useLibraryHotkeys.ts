@@ -20,8 +20,7 @@ export function useLibraryHotkeys(importMods: () => void): void {
   async function startPatcher() {
     await maybeShowHddWarning();
 
-    // Shared start path: force-disables skinhacks, then starts. Linked-bin
-    // offenders surface afterwards via badges + a warning toast, not a pre-flight.
+    // Linked-bin offenders surface afterwards via badges + a warning toast, not a pre-flight.
     await guardedStart({});
   }
 

@@ -26,7 +26,6 @@ vi.mock("@/stores", () => ({ useModHealthDrawerStore: () => vi.fn() }));
 function view(over: Partial<ModCardView> = {}): ModCardView {
   return {
     mod: createMockInstalledMod({ id: "a" }),
-    isFlagged: false,
     canChangeStorage: false,
     storageChangePending: false,
     isSelected: false,
@@ -35,7 +34,6 @@ function view(over: Partial<ModCardView> = {}): ModCardView {
     onCopyId: vi.fn(),
     onUninstall: vi.fn(),
     onSetStorage: vi.fn(),
-    setSkinhackInfoOpen: vi.fn(),
     ...over,
   } as ModCardView;
 }
