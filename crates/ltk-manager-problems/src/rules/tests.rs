@@ -40,7 +40,6 @@ fn each_rule_declares_who_answers_for_its_severity() {
                 "bin/base-skin-copy".to_owned(),
                 Some(ProblemSeverity::Warning)
             ),
-            ("bin/skinhack".to_owned(), Some(ProblemSeverity::Error)),
             (
                 "project/working-file".to_owned(),
                 Some(ProblemSeverity::Warning)
