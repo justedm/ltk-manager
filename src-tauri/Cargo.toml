@@ -1,6 +1,6 @@
 [package]
 name = "ltk-manager"
-version = "1.27.1"
+version = "1.31.0"
 description = "LeagueToolkit Mod Manager - Desktop app for managing League of Legends mods"
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -38,11 +38,13 @@ ltk-manager-core = { path = "../crates/ltk-manager-core", features = ["ts"] }
 ltk-manager-game = { path = "../crates/ltk-manager-game", features = ["ts"] }
 ltk-manager-library = { path = "../crates/ltk-manager-library", features = ["ts"] }
 ltk-manager-problems = { path = "../crates/ltk-manager-problems", features = ["ts"] }
+ltk-manager-runeforge = { path = "../crates/ltk-manager-runeforge", features = ["ts"] }
 ltk-manager-runtime = { path = "../crates/ltk-manager-runtime", features = ["ts"] }
 ltk-manager-workshop = { path = "../crates/ltk-manager-workshop", features = ["ts"] }
 ltk-telemetry = { workspace = true }
 
 ltk_mod_core = { version = "0.1.1" }
+ltk_mod_project = { workspace = true }
 ltk_overlay = { workspace = true }
 ltk_file = { workspace = true }
 ltk_game_data = { workspace = true }
@@ -91,18 +93,30 @@ tracing-appender = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
+    "Wdk_System_Threading",
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Cryptography",
     "Win32_Security_WinTrust",
     "Win32_Storage_FileSystem",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Environment",
     "Win32_System_Ioctl",
     "Win32_System_IO",
+    "Win32_System_Kernel",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+] }
+# Versions of wry's, so `PlatformWebview::controller` returns these types.
+webview2-com = "0.38"
+windows-core = "0.61"
+windows = { version = "0.61", features = [
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_UI_Shell",
 ] }
 
 [dev-dependencies]

@@ -58,8 +58,6 @@ export type AddableFields = {
  *  map holds, and every key is named by the tables or written as its hex.
  */
 export type AnimationGraph = {
-	/**  The linked file declaring the graph, and none where the open document does. */
-	source: AssetRef | null,
 	/**  `mClipDataMap`. */
 	clips: GraphClip[],
 	/**  `mTrackDataMap`. */
@@ -91,6 +89,10 @@ export type Announcement = {
 export type AppErrorResponse = 
 /**  An external tool installation failed. */
 { code: "INTEGRATION"; error: IntegrationError } | 
+/**  A settings backup could not be written or read. The variant says which. */
+{ code: "SETTINGS_BACKUP"; error: SettingsBackupError } | 
+/**  A move of the data directory was refused or failed. The variant says which. */
+{ code: "DATA_MOVE"; error: DataMoveError } | 
 /**  File system I/O failed. */
 { code: "IO"; detail: string } | 
 /**  JSON could not be read or written. */
@@ -178,6 +180,8 @@ export type AppErrorResponse =
 { code: "OVERLAY"; category: OverlayErrorCategory; detail: string } | 
 /**  A download was asked for from a domain the trusted providers list omits. */
 { code: "UNTRUSTED_DOMAIN"; domain: string } | 
+/**  A call to RuneForge failed. The variant says which and carries what the dialog renders. */
+{ code: "RUNEFORGE"; error: RuneforgeError } | 
 /**
  *  Something GitHub publishes could not be read. The kind says which
  *  remedy applies, and the feed says what was being read.
@@ -190,6 +194,20 @@ export type AppInfo = {
 	logFilePath: string | null,
 	os: string,
 	arch: string,
+};
+
+/**  The bytes that one [`DataArea`] takes. */
+export type AreaUsage = {
+	area: DataArea,
+	bytes: number,
+};
+
+/**  The verdict of the deep scan on one artifact. */
+export type ArtifactHealth = {
+	/**  `pending` until a scan finishes, then the worst severity among the findings. */
+	status: HealthStatus,
+	/**  The findings of the scan. A pending artifact may have none stored. */
+	findings?: Finding[],
 };
 
 /**  What an asset holds, for a viewer that reports it beside the preview. */
@@ -364,6 +382,11 @@ export type BinEdit =
  *  [`BinDocument::edit_properties`].
  */
 { kind: "editProperties"; edits: PropertyEdit[] } | 
+/**
+ *  Create `objects`, then edit several properties, as one undoable change.
+ *  [`BinDocument::create_and_edit`].
+ */
+{ kind: "createAndEdit"; objects: ObjectCreation[]; edits: PropertyEdit[] } | 
 /**  Add a property to the end of the holder at `path`. [`BinDocument::add_property`]. */
 { kind: "addProperty"; entry: string; path: string; property: NewProperty } | 
 /**  Take the property at `path` out of its holder. [`BinDocument::remove_property`]. */
@@ -395,7 +418,7 @@ export type BinEdit =
  *  row's list or map. [`BinDocument::declare_reference`].
  */
 { kind: "declareReference"; entry: string; path: string; reference: string; merge: boolean } | 
-/**  Create, remove or restore an object of a declared document. ADR-0049. */
+/**  Create, remove or restore an object. A declared document declares the edit (ADR-0049). */
 { kind: "object"; edit: ObjectEdit } | 
 /**  Edit the header's dependency list. ADR-0050. */
 { kind: "dependency"; edit: DependencyEdit } | 
@@ -694,6 +717,12 @@ export type ChangeKind =
 /**  Both hold it, with different values. */
 "changed";
 
+/**  A post field that the package would change on the target post. */
+export type ChangedPostField = {
+	/**  The field that changes. */
+	field: PostField,
+};
+
 /**  One named spell and every file declaring its object. */
 export type CharacterSpell = {
 	/**  The object's path hash, as `0x` and eight hex digits. */
@@ -931,8 +960,6 @@ export type Config_Deserialize = {
 	patchTft?: boolean,
 	/**  Whether to block mods from patching Scripts.wad.client. Default: true. */
 	blockScriptsWad?: boolean,
-	/**  Whether to run the linked-bin dependency check before starting the patcher. Default: true. */
-	linkedBinCheckEnabled?: boolean,
 	/**  Additional WAD files to exclude from overlay building. */
 	wadBlocklist?: WadBlocklistEntry[],
 	/**
@@ -951,6 +978,12 @@ export type Config_Deserialize = {
 	 *  the user sets themselves are used. Default: true.
 	 */
 	autoCategorizationEnabled?: boolean,
+	/**
+	 *  Whether the library sweep checks mod health at startup, after a hashtable
+	 *  sync and after an install. A check the user starts runs either way.
+	 *  Default: true.
+	 */
+	autoHealthCheckEnabled?: boolean,
 	/**  Enabling a mod moves it to the front of its folder. Off by default. */
 	promoteEnabledMods?: boolean,
 	/**
@@ -967,6 +1000,11 @@ export type Config_Deserialize = {
 	 *  takes effect on the next start. Default: false.
 	 */
 	verbosePatcherLogging?: boolean,
+	/**
+	 *  Whether the patcher runs builds from the beta delivery channel instead of
+	 *  the stable channel. Default: false.
+	 */
+	betaPatcher?: boolean,
 	/**
 	 *  Whether to set the `FULL_WAD_SCAN` hook flag, which scans every archive
 	 *  up front instead of the DLL's default of verifying each one as the game
@@ -1036,8 +1074,6 @@ export type Config_Serialize = {
 	patchTft: boolean,
 	/**  Whether to block mods from patching Scripts.wad.client. Default: true. */
 	blockScriptsWad: boolean,
-	/**  Whether to run the linked-bin dependency check before starting the patcher. Default: true. */
-	linkedBinCheckEnabled: boolean,
 	/**  Additional WAD files to exclude from overlay building. */
 	wadBlocklist: WadBlocklistEntry[],
 	/**
@@ -1056,6 +1092,12 @@ export type Config_Serialize = {
 	 *  the user sets themselves are used. Default: true.
 	 */
 	autoCategorizationEnabled: boolean,
+	/**
+	 *  Whether the library sweep checks mod health at startup, after a hashtable
+	 *  sync and after an install. A check the user starts runs either way.
+	 *  Default: true.
+	 */
+	autoHealthCheckEnabled: boolean,
 	/**  Enabling a mod moves it to the front of its folder. Off by default. */
 	promoteEnabledMods: boolean,
 	/**
@@ -1072,6 +1114,11 @@ export type Config_Serialize = {
 	 *  takes effect on the next start. Default: false.
 	 */
 	verbosePatcherLogging: boolean,
+	/**
+	 *  Whether the patcher runs builds from the beta delivery channel instead of
+	 *  the stable channel. Default: false.
+	 */
+	betaPatcher: boolean,
 	/**
 	 *  Whether to set the `FULL_WAD_SCAN` hook flag, which scans every archive
 	 *  up front instead of the DLL's default of verifying each one as the game
@@ -1123,6 +1170,20 @@ export type Config_Serialize = {
 	keepIncidents: number,
 	/**  Which built-in mods the overlay injects above every other mod. */
 	builtinMods: BuiltinModSettings,
+};
+
+/**  The account of the stored token. It holds nothing secret, so `settings.json` keeps it. */
+export type ConnectedAccount = {
+	/**  The id of the user on the site. */
+	userId: string,
+	/**  The user name. It is empty for an account that has not picked one. */
+	username: string,
+	/**  The name the site shows. */
+	displayName: string | null,
+	/**  The 8 characters after `rf_`, which the token page lists. */
+	tokenPrefix: string,
+	/**  The scopes of the token. */
+	scopes: Scope[],
 };
 
 /**
@@ -1224,6 +1285,89 @@ export type CurveKeys = {
 	modes: number[],
 };
 
+/**  A part of the manager's data on disk. */
+export type DataArea = 
+/**  The installed mods, which no clear removes. */
+"mods" | 
+/**  The overlay of each profile and the projects of the built-in mods. */
+"overlayBuilds" | 
+/**  The unpacked copies of packed mods that the previews read. */
+"modPreviews" | 
+/**  The translated shaders. */
+"shaders" | 
+/**  Overlay artifacts at the root of the data directory, which no build reads. */
+"leftovers" | 
+/**  The cache folders of the webview. Only on Windows. */
+"webviewCache";
+
+/**  One entry of the data directory that a move carries. */
+export type DataEntry = {
+	/**  The entry's name under the data directory. */
+	name: string,
+	/**  Bytes of the files under the entry. */
+	bytes: number,
+};
+
+/**  A reason that a data directory move is refused or failed. */
+export type DataMoveError = 
+/**  The new folder is the current data directory. */
+{ kind: "sameFolder" } | 
+/**  The new folder is inside an entry that the move carries. */
+{ kind: "insideData" } | 
+/**  Both folders hold data entries with these names. */
+{ kind: "occupied"; entries: string[] } | 
+/**  The patcher is running and holds files of the data directory. */
+{ kind: "patcherRunning" } | 
+/**  The volume of the new folder has less free space than the move needs. */
+{ kind: "noSpace"; needed: number; available: number } | 
+/**  A read, a write or a rename failed. */
+{ kind: "io"; detail: string };
+
+/**  What a move of the data directory does. */
+export type DataMoveKind = 
+/**  The entries of the current directory move into the new folder. */
+"move" | 
+/**  The new folder holds a library and the current directory holds none, so nothing moves. */
+"adopt";
+
+/**  A move of the data directory, planned before anything is written. */
+export type DataMovePlan = {
+	kind: DataMoveKind,
+	/**  The current data directory. */
+	from: string,
+	/**  The new data directory. */
+	to: string,
+	/**  The entries that move. Empty for [`DataMoveKind::Adopt`]. */
+	entries: DataEntry[],
+};
+
+/**  Progress of a move of the data directory to another folder. */
+export type DataMoveProgress = {
+	stage: DataMoveStage,
+	/**  Name of the entry being moved, under the data directory. */
+	currentEntry: string | null,
+	/**  Bytes moved so far. */
+	moved: number,
+	/**  Bytes that the whole move carries. */
+	total: number,
+};
+
+/**  Stage of a move of the data directory to another folder. */
+export type DataMoveStage = 
+/**  The entries are being renamed or copied into the new folder. */
+"moving" | 
+/**  The entries are in the new folder and the app restarts on the new location. */
+"restarting";
+
+/**  The disk usage of the manager's data. */
+export type DataUsage = {
+	/**  The data directory. */
+	location: string,
+	areas: AreaUsage[],
+	/**  `true` if the next start clears the webview cache. */
+	webviewClearPending: boolean,
+};
+
 /**  One layer's declarations manifest, read for an outline. */
 export type DeclarationsLayer = {
 	layer: string,
@@ -1244,6 +1388,14 @@ export type DeclarationsLoadError = {
 	document: string | null,
 	/**  Where in the manifest, `None` for an error in another file or at no place. */
 	span: LineSpan | null,
+};
+
+/**  One define a shader's TOCs declare, with every value they declare it with. */
+export type DeclaredDefine = {
+	/**  The define name. */
+	name: string,
+	/**  Every value that the TOCs declare for the name, sorted. */
+	values: string[],
 };
 
 /**  One diagnostic of the last apply, on the row it names. */
@@ -1587,6 +1739,8 @@ export type DefineSource =
 "switch" | 
 /**  `StaticMaterialPassDef.shaderMacros`. */
 "pass" | 
+/**  Picked in a shader def's preview, which writes nothing to the def. */
+"preview" | 
 /**  Set by the engine for the emitter that draws an engine particle shader. */
 "emitter";
 
@@ -1770,8 +1924,8 @@ export type EffectSystem = {
 	key: string,
 	/**  The `VfxSystemDefinitionData` object, `0x` and eight hex digits. */
 	system: string,
-	/**  The linked file declaring the system, and none where the skin's own document does. */
-	source: AssetRef | null,
+	/**  The system's path, where a table names it. */
+	name: string | null,
 };
 
 /**  How the game ended, as far as anything said. */
@@ -1810,7 +1964,7 @@ export type EnginePass =
  *  the error value is gone. The Tauri shell maps it to its own `ErrorCode`, and
  *  a CLI could map the same names to exit codes.
  */
-export type ErrorKind = "IO" | "SERIALIZATION" | "MODPKG" | "LEAGUE_NOT_FOUND" | "INVALID_PATH" | "MOD_NOT_FOUND" | "VALIDATION_FAILED" | "INTERNAL_STATE" | "OTHER" | "WORKSHOP_NOT_CONFIGURED" | "PROJECT_NOT_FOUND" | "PROJECT_ALREADY_EXISTS" | "PACK_FAILED" | "FANTOME" | "WAD_ERROR" | "WAD_BUILDER_ERROR" | "PATCHER" | "LAUNCHER" | "ZIP_ERROR" | "SCHEMA_VERSION_TOO_NEW" | "WORKSHOP" | "HASHTABLE" | "PREVIEW" | "BIN_DOCUMENT" | "OVERLAY" | "UNTRUSTED_DOMAIN";
+export type ErrorKind = "IO" | "SERIALIZATION" | "MODPKG" | "LEAGUE_NOT_FOUND" | "INVALID_PATH" | "MOD_NOT_FOUND" | "VALIDATION_FAILED" | "INTERNAL_STATE" | "OTHER" | "WORKSHOP_NOT_CONFIGURED" | "PROJECT_NOT_FOUND" | "PROJECT_ALREADY_EXISTS" | "PACK_FAILED" | "FANTOME" | "WAD_ERROR" | "WAD_BUILDER_ERROR" | "PATCHER" | "LAUNCHER" | "ZIP_ERROR" | "SCHEMA_VERSION_TOO_NEW" | "WORKSHOP" | "HASHTABLE" | "PREVIEW" | "BIN_DOCUMENT" | "OVERLAY" | "UNTRUSTED_DOMAIN" | "RUNEFORGE";
 
 /**  What a clip event does, for the kinds a viewport plays, and nothing for the rest. */
 export type EventKind = 
@@ -1970,6 +2124,19 @@ export type ExportSummary = {
 	skipped: string[],
 	/**  What the export wrote, for a surface that offers to reveal it. */
 	destination: string,
+};
+
+/**  The map mesh that a mesh of an exported glTF file was written from, read from its extras. */
+export type ExportedMesh = {
+	/**  The index of the mesh in its `.mapgeo` at the export. */
+	mesh: number,
+	/**  The entry path of the map's `MapContainer`. */
+	container: string,
+	/**
+	 *  The vertex count of the mesh at the export. A reimport compares it to detect a stale
+	 *  index.
+	 */
+	vertices: number,
 };
 
 /**  One `ExtraJointChainData`: a second chain turned by the angles of the first. */
@@ -2199,6 +2366,15 @@ export type FieldSchema = {
 	revisions: FieldRevision[],
 };
 
+/**  Where a prefilled value came from. */
+export type FieldSource = 
+/**  The package. */
+"package" | 
+/**  The target post as it is. */
+"current-post" | 
+/**  The default of the site. */
+"default";
+
 /**
  *  What one fix run did to a file, as against how much of it.
  * 
@@ -2243,6 +2419,27 @@ export type FileTypeStatus = {
 export type FilesOpened = {
 	paths: string[],
 };
+
+/**  One thing that an inspection or a scan found in a package. */
+export type Finding = {
+	/**  How serious the finding is. */
+	severity: FindingSeverity,
+	/**  The stable code of the finding. */
+	code: string,
+	/**  The text that the server wrote for the finding. */
+	message: string,
+	/**  The path inside the package that the finding is about. */
+	path: string | null,
+};
+
+/**  How serious a [`Finding`] is. */
+export type FindingSeverity = 
+/**  The server refuses the package. */
+"error" | 
+/**  The package is accepted with a problem. */
+"warning" | 
+/**  A note without a problem. */
+"info";
 
 /**
  *  What a repair would change, in the words a row draws.
@@ -2461,6 +2658,14 @@ export type GameSearchHit = {
 	score: number | null,
 	nameRanges: ([number, number])[],
 	pathRanges: ([number, number])[],
+};
+
+/**  A game version that a release may target. */
+export type GameVersion = {
+	/**  The id that a release request names. */
+	id: string,
+	/**  The patch, such as `25.21`. */
+	version: string,
 };
 
 /**  One chunk of a WAD archive. */
@@ -2820,6 +3025,17 @@ export type HealthCheckReadiness =
 /**  No tables, and nothing fetching them but a sync the user starts. */
 "unsynced";
 
+/**  Where an artifact is with the deep scan. */
+export type HealthStatus = 
+/**  The scan found no problem. */
+"ok" | 
+/**  The scan found warnings. */
+"warnings" | 
+/**  The scan found errors. */
+"errors" | 
+/**  The scan has not finished. A status that this build does not know reads as pending. */
+"pending";
+
 /**
  *  Progress of a mod health sweep, emitted per mod.
  * 
@@ -2963,20 +3179,6 @@ export type HistoryStep =
 
 /**  The action a global hotkey triggers when pressed. */
 export type HotkeyAction = "reloadMods" | "killLeague";
-
-/**  One effect a skin wears for as long as the character stands. */
-export type IdleEffect = {
-	/**  `effectKey`, `0x` and eight hex digits. */
-	effectKey: string,
-	/**  The system the skin's resolver maps the key to, where this document declares it. */
-	system: string | null,
-	/**  `boneName`, the joint the effect rides. */
-	bone: string,
-	/**  `targetBoneName`, the joint it aims at, and empty for one that aims at none. */
-	targetBone: string,
-	/**  `Position`, the effect's offset from its joint. */
-	position: [(number | null), (number | null), (number | null)],
-};
 
 /**  The `.modignore` line that keeps an entry out of a package. */
 export type IgnoreMatch = {
@@ -3382,6 +3584,25 @@ export type IntegrationStatus = {
 	operation: IntegrationOperation | null,
 };
 
+/**
+ *  One effect a skin draws on a joint: an idle effect, or an effect of a persistent condition.
+ * 
+ *  `PersistentVfxData` declares no `Position`, so the effect of a condition has a zero offset.
+ */
+export type JointEffect = {
+	/**
+	 *  `effectKey`, `0x` and eight hex digits, or the hash of `effectName` if the effect has
+	 *  no key. [`SkinModel::effect_systems`](super::SkinModel::effect_systems) maps it to its system.
+	 */
+	effectKey: string,
+	/**  `boneName`, the joint the effect rides. */
+	bone: string,
+	/**  `targetBoneName`, the joint it aims at, and empty for one that aims at none. */
+	targetBone: string,
+	/**  `Position`, the effect's offset from its joint. */
+	position: [(number | null), (number | null), (number | null)],
+};
+
 /**  One `DynamicsJointTreeData`: a root joint and the joints under it left unsimulated. */
 export type JointTree = {
 	/**  The hash path of the tree under the skin object. */
@@ -3436,6 +3657,16 @@ export type KindShape = {
 	value: PropertyKind | null,
 };
 
+/**  The newest release of an owned post. */
+export type LatestRelease = {
+	/**  The id of the release. */
+	id: string,
+	/**  The tag of the release. */
+	tag: string,
+	/**  When the release was created, as an ISO 8601 timestamp. */
+	createdAt: string,
+};
+
 /**
  *  Whether a launch is possible right now, and why not if it isn't.
  * 
@@ -3469,9 +3700,8 @@ export type LaunchKind = "match" | "replay" | "spectator" | "pbe";
  *  build the overlay, start the patcher, then ask the Riot Client to start
  *  League. Both actions stay reachable from the button's menu either way.
  * 
- *  Classic is the default while the launcher is experimental: it is the
- *  behaviour every existing install already has, and it depends on nothing
- *  outside this app.
+ *  Classic is the default because it is the behaviour every existing install
+ *  already has, and it depends on nothing outside this app.
  */
 export type LaunchMode = "classic" | "modern";
 
@@ -3767,38 +3997,10 @@ export type LinkChange =
 /**  A `-links` item of a dependency of the game's list the applied one lacks. */
 "removed";
 
-/**
- *  One library mod whose property-bins reference linked dependencies no archive
- *  the game mounts can answer.
- * 
- *  The lookup is across every mounted archive rather than inside the one the
- *  declaring bin came from, so what the check tests is presence anywhere in the
- *  built overlay bar the archives the user blocked.
- */
-export type LinkedBinOffenderInfo = {
-	/**  Library mod id (matches `InstalledMod.id` on the frontend). */
-	modId: string,
-	/**  Mod display name — a fallback for the UI when it can't resolve the id. */
-	displayName: string,
-	/**
-	 *  WAD targets (e.g. `Ahri.wad.client`) in this mod that contain the unresolved
-	 *  bins. May be empty when the offending bin came from a RAW override.
-	 */
-	wads: string[],
-	/**  The missing linked bin paths, deduped. */
-	missingLinks: string[],
-};
-
-/**
- *  Payload for the `linked-bins-warning` event, emitted after a patcher start whose
- *  single overlay build found enabled mods with unresolved linked dependencies (only
- *  when `linked_bin_check_enabled`). Injection is non-fatal, so this never blocks the
- *  start - it drives a non-blocking toast. The per-mod badges and the reachable
- *  `LinkedBinWarningDialog` carry the detail (fetched via `get_linked_bin_offenders`).
- */
-export type LinkedBinWarningPayload = {
-	/**  Number of enabled mods flagged in the latest build. */
-	count: number,
+/**  The world rectangle on X and Z that a map-wide texture covers, in engine units. */
+export type MapBounds = {
+	min: [(number | null), (number | null)],
+	max: [(number | null), (number | null)],
 };
 
 /**  One character a map stands in its scene. */
@@ -3846,6 +4048,10 @@ export type MapChunkItem = {
 	kind: MapItemKind,
 	/**  Where it stands in the map's space. */
 	position: [(number | null), (number | null), (number | null)],
+	/**  Its `transform`, column major with the translation last. */
+	transform: [(number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null)],
+	/**  The extent the viewport draws, and `None` for a class that states none. */
+	shape: MapItemShape | null,
 	/**  The layer mask, one bit per visibility layer. */
 	visibility: number,
 	/**  The controller that shows and hides it, which no layer mask expresses. */
@@ -3936,6 +4142,14 @@ export type MapFiles = {
 	materials: AssetRef | null,
 };
 
+/**  One visibility flag of a map: the layer bit and the name the map gives it. */
+export type MapFlag = {
+	/**  The layer bit, 0 to 7. */
+	bit: number,
+	/**  `PublicName` of the flag definition. */
+	name: string,
+};
+
 /**  One fog of [`MapPostEffects`], ramping from nothing at `start` to its most at `end`. */
 export type MapFog = {
 	/**  The fog is drawn. */
@@ -3950,6 +4164,106 @@ export type MapFog = {
 	maxIntensity: number | null,
 };
 
+/**  An open `.mapgeo` after a change, and what the change did to the meshes a viewport draws. */
+export type MapGeometryChange = {
+	state: MapGeometryState,
+	deltas: MeshDelta[],
+};
+
+/**  One change to the meshes of an open `.mapgeo`, which is one undo step. */
+export type MapGeometryEdit = 
+/**  Sets the transform of each mesh and recomputes its bounding box. */
+{ kind: "transform"; meshes: MeshTransform[] } | 
+/**  Sets the visibility controller of each mesh, `0x` and eight hex digits, or none. */
+{ kind: "controller"; meshes: number[]; controller: string | null } | 
+/**
+ *  Sets the region entity of each mesh, `0x` and eight hex digits, or none, and
+ *  recomputes its bounding box.
+ */
+{ kind: "region"; meshes: number[]; region: string | null } | 
+/**  Sets the material of one submesh, as the entry path of a `StaticMaterialDef`. */
+{ kind: "material"; mesh: number; submesh: number; material: string } | 
+/**  Sets the visibility layer mask of each mesh. */
+{ kind: "visibility"; meshes: number[]; mask: number } | 
+/**  Sets the quality mask of each mesh. */
+{ kind: "quality"; meshes: number[]; mask: number } | 
+/**  Turns backface culling off or on for each mesh. */
+{ kind: "backfaceCulling"; meshes: number[]; disabled: boolean } | 
+/**  Appends a copy of each mesh. */
+{ kind: "duplicate"; meshes: number[] } | 
+/**  Removes each mesh and drops the buffers that no remaining mesh uses. */
+{ kind: "remove"; meshes: number[] } | 
+/**
+ *  Appends the meshes `meshes` of the model file at `source`, scaled by `scale` and
+ *  turned from `up` to the engine's axes, with `transform` as each mesh's transform.
+ */
+{ kind: "import"; source: string; meshes: number[]; scale: number | null; up: UpAxis; 
+/**  The entry path of the `StaticMaterialDef` of each material of the file, by index. */
+materials: string[]; 
+/**  The layer mask of every new mesh. */
+visibility: number; 
+/**  The controller of every new mesh, `0x` and eight hex digits, or none. */
+controller: string | null; 
+/**  Column major with the translation last. */
+transform: [(number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null)] } | 
+/**
+ *  Replaces the mesh at `mesh` with the mesh `source_mesh` of the model file at `source`,
+ *  scaled by `scale` and turned from `up` to the engine's axes. The new mesh keeps the
+ *  visibility, controller, region, flags, light channels and texture overrides of the old
+ *  one, and draws its submesh materials in source material order. Its transform is the
+ *  identity, because the importer applies the file's node transforms to the vertices.
+ */
+{ kind: "reimport"; mesh: number; source: string; sourceMesh: number; scale: number | null; up: UpAxis };
+
+/**  What a mesh editor lists and inspects of one mesh. */
+export type MapGeometryMesh = {
+	index: number,
+	/**  Column major with the translation last. */
+	transform: [(number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null)],
+	min: [(number | null), (number | null), (number | null)],
+	max: [(number | null), (number | null), (number | null)],
+	/**  The layer mask, one bit per visibility layer. */
+	visibility: number,
+	/**  The controller's path hash as `0x` and eight hex digits, and none for no controller. */
+	controller: string | null,
+	/**  The region entity's path hash as `0x` and eight hex digits, and none for no region. */
+	region: string | null,
+	/**  The quality mask, one bit per quality level. */
+	quality: number,
+	backfaceCullingDisabled: boolean,
+	vertexCount: number,
+	/**  The material of each submesh, in submesh order. */
+	materials: string[],
+};
+
+/**  Where an open `.mapgeo` stands after a change. */
+export type MapGeometryState = {
+	id: number,
+	/**  Counts every change. */
+	revision: number,
+	/**  The document holds changes that no save wrote. */
+	dirty: boolean,
+};
+
+/**  The grass tint of one `MapAlternateAsset`, and the visibility flag that turns it on. */
+export type MapGrassAlternate = {
+	/**  The layer bit of the flag, 0 to 7. */
+	bit: number,
+	texture: AssetRef,
+};
+
+/**  The grass tint texture of one `MapSkin`. */
+export type MapGrassTint = {
+	/**  The `MapSkin`'s `name`. */
+	skin: string,
+	texture: AssetRef,
+	/**
+	 *  The skin's alternate tints, in file order. The first one whose flag is on replaces
+	 *  `texture`.
+	 */
+	alternates: MapGrassAlternate[],
+};
+
 /**  What a placeable is to a scene, which is what an outliner marks its row with. */
 export type MapItemKind = 
 /**  A `MapParticle`, which plays a system. */
@@ -3962,8 +4276,31 @@ export type MapItemKind =
 "group" | 
 /**  A `MapAudio`. */
 "audio" | 
+/**  A dynamic or a static point light or spotlight. */
+"light" | 
+/**  A `MapCubemapProbe`. */
+"probe" | 
+/**  A `MapLightingVolume` or a `LightRegionEntityTemplate`. */
+"volume" | 
+/**  A `MapMotionPath`. */
+"path" | 
 /**  Any other class. */
 "other";
+
+/**  The extent a viewport draws around a placeable, in the map's space. */
+export type MapItemShape = 
+/**  The reach of a point light around its position. */
+{ type: "sphere"; radius: number | null } | 
+/**  The frustum of a spotlight, along the -Z axis of its transform. Angles are in degrees. */
+{ type: "frustum"; fov: number | null; aspect: number | null; near: number | null; far: number | null; orthographic: boolean; orthoHeight: number | null } | 
+/**  An axis-aligned box: a probe's region or a banner's box. */
+{ type: "box"; min: [(number | null), (number | null), (number | null)]; max: [(number | null), (number | null), (number | null)] } | 
+/**  The points of a motion path: its position, then the end of each segment. */
+{ type: "path"; points: ([(number | null), (number | null), (number | null)])[] } | 
+/**  A lighting volume: the cube from -0.5 to 0.5 on each axis under its transform. */
+{ type: "volume" } | 
+/**  The closed polygon of a light region, in the space of its transform. */
+{ type: "polygon"; points: ([(number | null), (number | null), (number | null)])[] };
 
 /**
  *  One map's materials, one per path asked for and in that order, its visibility controllers, and
@@ -3980,6 +4317,11 @@ export type MapModel = {
 	 *  `LTKM` buffer and a placeable reference a controller by its path hash.
 	 */
 	controllers: MapController[],
+	/**
+	 *  The visibility flags that the map's `Map` object names. Empty if nothing holds that
+	 *  object or it names none.
+	 */
+	flags: MapFlag[],
 	/**  Null where the map's container states no sun, which a backdrop lights with a default. */
 	sun: MapSun | null,
 	/**  Null where the map's container states no post effects, which no shipped map does. */
@@ -3991,6 +4333,23 @@ export type MapModel = {
 	 *  none or nothing holds it.
 	 */
 	lightGrid: AssetRef | null,
+	/**
+	 *  The grass tint of each skin that links the map, in file order. Empty until the caller
+	 *  reads the map's own bin, which holds the skins.
+	 */
+	grassTints: MapGrassTint[],
+	/**  Null where the map's container states no bounds. */
+	bounds: MapBounds | null,
+};
+
+/**  One string field that names a placeable, addressed as a property edit addresses it. */
+export type MapNameReference = {
+	/**  The object that holds the field, as `0x` and eight hex digits. */
+	entry: string,
+	/**  The hash path of the struct that holds the field. Empty for a field of the object. */
+	holder: string,
+	/**  The field, as `0x` and eight hex digits. */
+	field: string,
 };
 
 /**  The number of visible parents that makes a child controller visible. */
@@ -4051,6 +4410,31 @@ export type MapPostEffects = {
 	depthOfField: MapDepthOfField,
 };
 
+/**  A created map project and the container that its map shell opens. */
+export type MapProject = {
+	project: WorkshopProject,
+	container: MapProjectContainer,
+};
+
+/**  The `MapContainer` object that a new map project opens. */
+export type MapProjectContainer = {
+	/**  The `.materials.bin` that declares the container. */
+	asset: AssetRef,
+	/**  The container's path hash, `0x` and eight hex digits. */
+	entry: string,
+	path: MapPath,
+	/**  The path of the `.materials.bin`. */
+	file: string,
+};
+
+/**  One `MapSkin` of a game map and the container that it links. */
+export type MapSkinContainer = {
+	/**  The `MapSkin`'s `name`. */
+	skin: string,
+	/**  `MapSkin.mMapContainerLink`. */
+	container: MapPath,
+};
+
 /**  Which map skin every game shows, whatever skin the server names. */
 export type MapSkinMode = 
 /**  The skin the server names. */
@@ -4082,6 +4466,25 @@ export type MapSsao = {
 	/**  `EdgeAwareBlur`, the blur keeps a nearer surface's occlusion off the one behind it. */
 	edgeAwareBlur: boolean,
 };
+
+/**  A supported map and its skins that link a shipped container. */
+export type MapStart = {
+	/**  The map id, such as `Map11`. */
+	map: string,
+	skins: MapSkinContainer[],
+};
+
+/**  The initial content of a map project. */
+export type MapStartingPoint = 
+/**  Nothing until the first edit. */
+"shipped" | 
+/**  A copy of the skin's container, and declarations that link every skin to it. */
+"skin" | 
+/**
+ *  A copy of the skin's container with only the meshes that have a controller or a region,
+ *  and the same declarations.
+ */
+"geometry";
 
 /**
  *  A map's sun, sky and fog, as its `MapSunProperties` states them.
@@ -4124,6 +4527,10 @@ export type MapVariant = {
 	skin: string | null,
 	/**  The map that skin draws. */
 	map: MapPath,
+	/**  The `MapSkin` object, and none for a map a container states itself. */
+	skinEntry: HexBinHash | null,
+	/**  The `Map` object of the same file that lists the skin, and none where no `Map` lists it. */
+	mapEntry: HexBinHash | null,
 };
 
 /**  One entry of `mMaskDataMap`. */
@@ -4135,6 +4542,19 @@ export type Mask = {
 	id: number,
 	/**  `mWeightList`, one weight per joint of the skeleton in the skeleton's order. */
 	weights: (number | null)[],
+};
+
+/**  A `StaticMaterialDef` that an import creates for one material of a model file. */
+export type MaterialImport = {
+	/**  The entry path, which is also the material's `name`. */
+	name: string,
+	template: MaterialTemplate,
+	/**  The model file. */
+	model: string,
+	/**  The material of the model file, by index. */
+	material: number,
+	/**  An image file that replaces the texture of the model's material. */
+	texture: string | null,
 };
 
 /**  `StaticMaterialDef.type`, the family a material's shader belongs to. */
@@ -4154,12 +4574,10 @@ export type MaterialPreview = {
 	/**  The material's path, where a table names it. */
 	name: string | null,
 	/**
-	 *  The document declares no object under the link, so every slot is empty and the
-	 *  submesh draws as an error rather than as a guess.
+	 *  No bin the read reached declares an object under the link, so every slot is empty and
+	 *  the submesh draws as an error rather than as a guess.
 	 */
 	missing: boolean,
-	/**  The linked file declaring the material, and none where the document read does. */
-	source: AssetRef | null,
 	/**
 	 *  `dynamicMaterial` is set, so the slots are the static values of an animated
 	 *  material.
@@ -4204,15 +4622,15 @@ export type MaterialProgram = {
 	warnings: MaterialWarning[],
 };
 
-/**  Where the materials a program read names are declared. */
+/**
+ *  The bin a program read resolves its materials against.
+ * 
+ *  A material that the bin does not declare is read from the first bin of its lookup that
+ *  does, so a caller names a material by its hash alone.
+ */
 export type MaterialSource = 
 /**  An open document, such as a skin's bin. */
 { kind: "document"; document: BinDocumentId } | 
-/**
- *  A bin read for the call, such as a file a skin links, resolved against the
- *  project of `document` where one is open and against the install alone otherwise.
- */
-{ kind: "file"; asset: AssetRef; document: BinDocumentId | null } | 
 /**
  *  A map's `.materials.bin`, located as `read_map` locates it: in the project of
  *  `document` first, where one is open, and in the install second.
@@ -4228,6 +4646,13 @@ export type MaterialTarget =
  *  program is keyed by the hash of `entry:path`, since it has no object of its own.
  */
 { kind: "embedded"; entry: string; path: string };
+
+/**  The stock static mesh shader that a created map material links. */
+export type MaterialTemplate = 
+/**  `Shaders/StaticMesh/DefaultEnv_Flat`. */
+"flat" | 
+/**  `Shaders/StaticMesh/DefaultEnv_Flat_AlphaTest`. */
+"flatAlphaTest";
 
 /**  Something the engine does silently that a preview says out loud. */
 export type MaterialWarning = 
@@ -4253,7 +4678,13 @@ export type MaterialWarning =
  *  A shader texture neither the material nor the def gives a path, so the engine's
  *  fallback texture is what draws.
  */
-{ kind: "noTexturePath"; name: string };
+{ kind: "noTexturePath"; name: string } | 
+/**
+ *  The define list selects no compiled permutation, so the shader def preview draws the
+ *  nearest compiled one. `set` holds each changed define as `NAME=VALUE`, and `unset` each
+ *  removed name.
+ */
+{ kind: "nearestPermutation"; set: string[]; unset: string[] };
 
 /**  Which typed view writes a member. */
 export type MemberScalar = "float" | "int" | "uint" | "bool";
@@ -4275,6 +4706,28 @@ export type MenuStatus =
 "external" | 
 /**  Registrations changed or an operation was interrupted. */
 "changed";
+
+/**
+ *  One change to the meshes a viewport draws, in the order a change applies them.
+ * 
+ *  The indices of each delta are the ones the meshes hold once every delta before it applied.
+ */
+export type MeshDelta = 
+/**  The mesh at `mesh` now reads as `record`. `from` is the transform it was drawn with. */
+{ kind: "update"; mesh: number; from: [(number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null)]; record: MapGeometryMesh } | 
+/**  The mesh at `mesh` is gone, and the meshes after it moved down by one. */
+{ kind: "remove"; mesh: number } | 
+/**
+ *  A mesh landed at `mesh`, and the meshes from there on moved up by one. Its vertices
+ *  are read with [`MapGeometryDocument::preview_meshes`].
+ */
+{ kind: "insert"; mesh: number };
+
+/**  One mesh's transform, column major with the translation last. */
+export type MeshTransform = {
+	mesh: number,
+	transform: [(number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null), (number | null)],
+};
 
 /**
  *  What one meta schema database is, as the cache card names it.
@@ -4302,12 +4755,50 @@ export type MigrationProgress = {
 	currentFile: string,
 };
 
-/**  The movement class and its written speed or duration. */
+/**  The missile's `verticalFacing`, which sets how it pitches. */
+export type MissileFacing = 
+/**  `VeritcalFacingMatchVelocity`: the missile pitches along its travel. */
+{ kind: "matchVelocity" } | 
+/**  `VerticalFacingFaceTarget`: the missile pitches toward its target. */
+{ kind: "faceTarget" } | 
+/**  A class whose facing is not implemented. */
+{ kind: "unsupported"; class_hash: string };
+
+/**  The missile's `heightSolver`, which replaces the height that the movement gives. */
+export type MissileHeight = 
+/**  `BlendedLinearHeightSolver`. */
+{ kind: "blendedLinear" } | 
+/**  `GravityHeightSolver`: an arc under `gravity` in units per second squared. */
+{ kind: "gravity"; gravity: number | null } | 
+/**  `FollowTerrainHeightSolver`: a height above the ground. */
+{ kind: "followTerrain"; heightOffset: number | null; maxSlope: number | null } | 
+/**  `SinusoidalHeightSolver`: a wave over the straight line. */
+{ kind: "sinusoidal"; amplitude: number | null; periods: number | null; verticalOffset: number | null; phase: number | null } | 
+/**  `CurveTheDifferenceHeightSolver`. */
+{ kind: "curveTheDifference"; initialTargetHeightOffset: number | null } | 
+/**  A class whose height is not implemented. */
+{ kind: "unsupported"; class_hash: string };
+
+/**  The movement class and its written fields, each absent where the spell omits it. */
 export type MissileMovement = 
-/**  Constant speed in engine units per second. */
+/**  `FixedSpeedMovement`: constant speed in engine units per second. */
 { kind: "fixedSpeed"; speed: number | null } | 
-/**  A fixed travel duration in seconds. */
+/**  `FixedTimeMovement`: a fixed travel duration in seconds. */
 { kind: "fixedTime"; duration: number | null } | 
+/**  `AcceleratingMovement`: a speed that changes by `acceleration` within its clamps. */
+{ kind: "accelerating"; initialSpeed: number | null; acceleration: number | null; minSpeed: number | null; maxSpeed: number | null } | 
+/**  `DecelToLocationMovement`: the accelerating fields, braking to stop on the target. */
+{ kind: "decelToLocation"; initialSpeed: number | null; acceleration: number | null; minSpeed: number | null; maxSpeed: number | null } | 
+/**  `FixedSpeedSplineMovement`: a Hermite curve travelled at a constant speed. */
+{ kind: "fixedSpeedSpline"; speed: number | null; spline: MissileSpline | null } | 
+/**  `FixedTimeSplineMovement`: a Hermite curve travelled in a fixed duration. */
+{ kind: "fixedTimeSpline"; duration: number | null; spline: MissileSpline | null } | 
+/**  `PhysicsMovement`: a launch speed that drag slows for `lifetime` seconds. */
+{ kind: "physics"; initialSpeed: number | null; drag: number | null; lifetime: number | null } | 
+/**  `CircleMovement`: a circle about the target that turns and widens. */
+{ kind: "circle"; angularVelocity: number | null; linearVelocity: number | null; radialVelocity: number | null; lifetime: number | null } | 
+/**  `SyncCircleMovement`: a circle whose angle follows the time since the cast. */
+{ kind: "syncCircle"; angularVelocity: number | null; lifetime: number | null; axis: number | null } | 
 /**  A class whose trajectory is not implemented. */
 { kind: "unsupported"; class_hash: string } | 
 /**  No movement component was written. */
@@ -4327,6 +4818,40 @@ export type MissileSpec = {
 	targetHeight: number | null,
 	/**  The initial target-height offset. */
 	initialTargetHeight: number | null,
+	/**  `mUseHeightOffsetAtEnd`. */
+	heightOffsetAtEnd: boolean | null,
+	/**  The height solver, absent where the spec writes none. */
+	height: MissileHeight | null,
+	/**  The vertical facing, absent where the spec writes none. */
+	facing: MissileFacing | null,
+};
+
+/**  One spell that fires a system as its missile. */
+export type MissileSpell = {
+	/**  The spell object's hash, as `0x` and eight hex digits. */
+	objectHash: string,
+	/**  The spell object's path, or its hash where no table names it. */
+	path: string,
+	/**  The path below `Characters/{character}/Spells`, or the whole path outside it. */
+	name: string,
+	/**  The spell's missile specification. */
+	missile: MissileSpec,
+	/**  The spell's rank-one cast range, in engine units. */
+	range: number | null,
+	/**  The spell's `missileSpeed`, in engine units per second. */
+	missileSpeed: number | null,
+};
+
+/**  A spline movement's `HermiteSplineInfo`, with omitted values kept absent. */
+export type MissileSpline = {
+	/**  `mStartPositionOffset`, in the frame that faces the target. */
+	startOffset: [(number | null), (number | null), (number | null)] | null,
+	/**  `mControlPoint1`, the start tangent as a share of the travel distance. */
+	control1: [(number | null), (number | null), (number | null)] | null,
+	/**  `mControlPoint2`, the end tangent as a share of the travel distance. */
+	control2: [(number | null), (number | null), (number | null)] | null,
+	/**  `mUseMissilePositionAsOrigin`. */
+	fromMissile: boolean | null,
 };
 
 /**
@@ -4566,6 +5091,39 @@ export type ModWadReport = {
 	derived?: DerivedCategorization,
 };
 
+/**  One material of a model file, as the import dialog lists it. */
+export type ModelMaterialSummary = {
+	name: string,
+	/**  The texture file, and none for an embedded texture or no texture. */
+	texture: string | null,
+	/**  The texture is stored inside the model file. */
+	embedded: boolean,
+	/**  The material names a texture file that does not exist. */
+	missing: boolean,
+	alpha: boolean,
+};
+
+/**  One mesh of a model file, as the import dialog lists it. */
+export type ModelMeshSummary = {
+	name: string,
+	vertices: number,
+	triangles: number,
+	/**  The source materials that the mesh draws with, by index. */
+	materials: number[],
+	/**  The map mesh that the glTF mesh was exported from. `None` if the extras have none. */
+	exported: ExportedMesh | null,
+};
+
+/**  What a model file holds, as the import dialog shows it. */
+export type ModelSummary = {
+	meshes: ModelMeshSummary[],
+	materials: ModelMaterialSummary[],
+	/**  Engine units per file unit, from the file's unit setting, else 1. */
+	scale: number | null,
+	up: UpAxis,
+	skipped: SkippedItems[],
+};
+
 /**
  *  One module action on a layer's manifest, each module named by its index in `modules`.
  *  ADR-0048, ADR-0054.
@@ -4624,6 +5182,29 @@ export type NewItem = {
 	class: string | null,
 };
 
+/**  The body of `POST /api/v1/mods`: the uploads and the overrides of the prefill. */
+export type NewMod = NewMod_Serialize | NewMod_Deserialize;
+
+/**  The body of `POST /api/v1/mods`: the uploads and the overrides of the prefill. */
+export type NewMod_Deserialize = {
+	/**  The inspected uploads. The first becomes the primary artifact. */
+	uploadIds: string[],
+	/**  The post fields that differ from the prefill. */
+	post?: PostOverrides_Deserialize,
+	/**  The release fields that differ from the prefill. */
+	release?: ReleaseOverrides_Deserialize,
+};
+
+/**  The body of `POST /api/v1/mods`: the uploads and the overrides of the prefill. */
+export type NewMod_Serialize = {
+	/**  The inspected uploads. The first becomes the primary artifact. */
+	uploadIds: string[],
+	/**  The post fields that differ from the prefill. */
+	post?: PostOverrides_Serialize,
+	/**  The release fields that differ from the prefill. */
+	release?: ReleaseOverrides_Serialize,
+};
+
 /**  Where a new object of a declared document starts. */
 export type NewObject = 
 /**  A copy of an object the document holds: `clone`. */
@@ -4647,7 +5228,14 @@ class: string } |
  */
 { type: "template"; 
 /**  The template's catalog id. */
-template: string };
+template: string } | 
+/**
+ *  An object that clipboard `text` carries as a struct value: `class` and a `set` of each
+ *  of its properties.
+ */
+{ type: "paste"; 
+/**  The clipboard text of a copied object. */
+text: string };
 
 /**  A property Add property writes: a field the schema declares, or one the reader shapes. */
 export type NewProperty = 
@@ -4661,6 +5249,41 @@ field: string } |
 field: string; shape: KindShape; 
 /**  The class an embed holds, as a name or `0x` and eight hex digits. */
 class: string | null };
+
+/**  The body of `POST /api/v1/mods/:modId/releases`. */
+export type NewRelease = NewRelease_Serialize | NewRelease_Deserialize;
+
+/**  The body of `POST /api/v1/mods/:modId/releases`. */
+export type NewRelease_Deserialize = {
+	/**  The inspected uploads. The first becomes the primary artifact. */
+	uploadIds: string[],
+	/**  The tag. The server uses the tag of the package if it is `None`. */
+	tag?: string | null,
+	/**  The release notes. */
+	description?: string | null,
+	/**  The game version that the release targets. */
+	gameVersion?: string | null,
+	/**  The post fields to refresh from the package. */
+	updatePost: PostField[],
+	/**  Whether the status of the post becomes working. */
+	markAsWorking: boolean,
+};
+
+/**  The body of `POST /api/v1/mods/:modId/releases`. */
+export type NewRelease_Serialize = {
+	/**  The inspected uploads. The first becomes the primary artifact. */
+	uploadIds: string[],
+	/**  The tag. The server uses the tag of the package if it is `None`. */
+	tag?: string | null,
+	/**  The release notes. */
+	description?: string | null,
+	/**  The game version that the release targets. */
+	gameVersion?: string | null,
+	/**  The post fields to refresh from the package. */
+	updatePost: PostField[],
+	/**  Whether the status of the post becomes working. */
+	markAsWorking: boolean,
+};
 
 /**
  *  One node of one bin: which object, and where inside it.
@@ -4757,6 +5380,12 @@ export type ObjectClassHit = {
 	rows: number,
 };
 
+/**  A new object of [`BinDocument::create_and_edit`]: its name and where it starts. */
+export type ObjectCreation = {
+	name: string,
+	origin: NewObject,
+};
+
 /**  One declaration of an object: the file that declares it and the class it carries. */
 export type ObjectDeclaration = {
 	/**  The declaring file, as an open reads it. */
@@ -4781,16 +5410,19 @@ export type ObjectDirListing = {
 	objects: ObjectNodeEntry[],
 };
 
-/**  An object edit of a declared document. ADR-0049. */
+/**
+ *  An object edit. A declared document declares it (ADR-0049), and any other document takes it
+ *  as an undoable edit.
+ */
 export type ObjectEdit = 
 /**
- *  Declare a new object named `name`, answering [`EditOutcome::Object`].
+ *  Add a new object named `name`, answering [`EditOutcome::Object`].
  *  [`BinDocument::create_object`].
  */
 { kind: "create"; name: string; origin: NewObject } | 
-/**  Declare the removal of `entry`. [`BinDocument::remove_object`]. */
+/**  Remove `entry`. [`BinDocument::remove_object`]. */
 { kind: "remove"; entry: string } | 
-/**  Take back the removal of `entry`. [`BinDocument::restore_object`]. */
+/**  Take back a declared removal of `entry`. [`BinDocument::restore_object`]. */
 { kind: "restore"; entry: string };
 
 /**  One object the full search matched, with the runs its path marks. */
@@ -5008,6 +5640,32 @@ export type OverlayProgress = {
 
 /**  Stage of an overlay build. */
 export type OverlayStage = "indexing" | "collecting" | "patching" | "strings" | "complete";
+
+/**  One post of `GET /api/v1/me/mods`, with its newest release. */
+export type OwnedModPost = {
+	/**  The id of the post. */
+	id: string,
+	/**  The name of the post. */
+	name: string,
+	/**  `public`, `private` or `unlisted`. */
+	visibility: string,
+	/**  Whether the post is published. */
+	isPublished: boolean,
+	/**  When the post last changed, as an ISO 8601 timestamp. */
+	updatedAt: string,
+	/**  The newest release, or `None` for a post without one. */
+	latestRelease: LatestRelease | null,
+};
+
+/**  An owned post as the target picker offers it. */
+export type OwnedPostOption = {
+	/**  The id of the post. */
+	id: string,
+	/**  The name of the post. */
+	name: string,
+	/**  The tag of its latest semver release. */
+	latestTag: string | null,
+};
 
 export type PackFormat = "modpkg" | "fantome";
 
@@ -5265,6 +5923,21 @@ export type PendingUpdate = {
 	body: string | null,
 };
 
+/**
+ *  One entry of `PersistentEffectConditions`, which the engine applies while its conditions
+ *  are true.
+ * 
+ *  The conditions themselves are left out, because the preview does not evaluate them.
+ */
+export type PersistentCondition = {
+	/**  `PersistentVfxs`, in the order the entry lists them. */
+	effects: JointEffect[],
+	/**  `SubmeshesToShow`, each the hash of a submesh name, `0x` and eight hex digits. */
+	shown: string[],
+	/**  `SubmeshesToHide`, each the hash of a submesh name, `0x` and eight hex digits. */
+	hidden: string[],
+};
+
 export type PlatformSupport = {
 	os: string,
 	patcherAvailable: boolean,
@@ -5409,6 +6082,104 @@ damping: number | null } |
 path: string; 
 /**  The modifier's class as the tables name it, and its hash where none does. */
 class: string };
+
+/**  A field of a mod post that a prefill proposes. */
+export type PostField = 
+/**  The name of the post. A release never refreshes it. */
+"name" | 
+/**  The one-line description. */
+"shortDescription" | 
+/**  The long description. */
+"description" | 
+/**  The category. */
+"category" | 
+/**  The license. */
+"license" | 
+/**  The thumbnail. */
+"thumbnailImageId" | 
+/**  The champions. */
+"championIds" | 
+/**  The maps. */
+"mapIds" | 
+/**  The themes. A release never refreshes them. */
+"themes" | 
+/**  The features. A release never refreshes them. */
+"features" | 
+/**  A field that this build does not know. */
+"unknown";
+
+/**  The post fields of a new post that differ from the prefill. */
+export type PostOverrides = PostOverrides_Serialize | PostOverrides_Deserialize;
+
+/**  The post fields of a new post that differ from the prefill. */
+export type PostOverrides_Deserialize = {
+	/**  The name of the post. */
+	name?: string | null,
+	/**  The category of the post. */
+	category?: string | null,
+};
+
+/**  The post fields of a new post that differ from the prefill. */
+export type PostOverrides_Serialize = {
+	/**  The name of the post. */
+	name?: string | null,
+	/**  The category of the post. */
+	category?: string | null,
+};
+
+/**  The post and the release that the server proposes, with where each value came from. */
+export type Prefill = {
+	/**  The proposed post fields. */
+	post: PrefillPost,
+	/**  The proposed release fields. */
+	release: PrefillRelease,
+	/**  Where each release field came from. */
+	sources: PrefillSources,
+	/**  The findings of the package plus those of the site. */
+	findings: Finding[],
+	/**  The next free tag if the tag of the package is taken. */
+	suggestedTag: string | null,
+	/**  The post fields that the package would change on the target post. */
+	changedPostFields: ChangedPostField[],
+};
+
+/**  The post fields that a prefill proposes. */
+export type PrefillPost = {
+	/**  The name of the post. */
+	name: string,
+	/**  The one-line description. */
+	shortDescription: string | null,
+	/**  The category of the post. */
+	category: string,
+	/**  The staged thumbnail image, or the current one of the target post. */
+	thumbnailImageId: string | null,
+};
+
+/**  The release fields that a prefill proposes. */
+export type PrefillRelease = {
+	/**  The tag of the release. */
+	tag: string,
+	/**  The release notes. */
+	notes: string,
+	/**  The game version that the release targets. */
+	gameVersionId: string | null,
+	/**  The label of the package artifact. */
+	artifactLabel: string,
+};
+
+/**  Where each release field of a prefill came from. */
+export type PrefillSources = {
+	/**  The sources of the release fields. */
+	release: ReleaseSources,
+};
+
+/**  A `StaticMaterialDef` that a shader def's preview draws the def through. */
+export type PreviewMaterial = {
+	/**  The bin that declares the material. */
+	asset: AssetRef,
+	/**  The material's object hash, `0x` and eight hex digits, or its path. */
+	entry: string,
+};
 
 /**  One finding, at one site, from one rule. */
 export type Problem = Problem_Serialize | Problem_Deserialize;
@@ -5616,6 +6387,131 @@ export type ProtocolInstallProgress = {
 /**  Where a protocol install has got to. */
 export type ProtocolInstallStage = "downloading" | "validating" | "complete" | "error";
 
+/**  The body of `POST /api/v1/mods/:modId/publish`: the AI content answer, when the site asks. */
+export type PublishAnswer = PublishAnswer_Serialize | PublishAnswer_Deserialize;
+
+/**  The body of `POST /api/v1/mods/:modId/publish`: the AI content answer, when the site asks. */
+export type PublishAnswer_Deserialize = {
+	/**  Whether the post content is AI generated. */
+	hasAiGeneratedPostContent?: boolean | null,
+	/**  The `aiContentDisclosureVersion` of the checklist that the answer replies to. */
+	expectedVersion?: string | null,
+};
+
+/**  The body of `POST /api/v1/mods/:modId/publish`: the AI content answer, when the site asks. */
+export type PublishAnswer_Serialize = {
+	/**  Whether the post content is AI generated. */
+	hasAiGeneratedPostContent?: boolean | null,
+	/**  The `aiContentDisclosureVersion` of the checklist that the answer replies to. */
+	expectedVersion?: string | null,
+};
+
+/**  Why `POST /api/v1/mods/:modId/publish` did not publish. */
+export type PublishChecklist = {
+	/**  Whether the account publishes directly or through a review. */
+	path: PublishPath,
+	/**  What the post still lacks. */
+	missing: PublishRequirement[],
+	/**  The version that an AI content answer replies to. */
+	aiContentDisclosureVersion: string,
+	/**  A moderator label is active, so only a yes answer is accepted. */
+	aiModeratorEnforced: boolean,
+	/**  The site path where the creator requests a review, such as `/mods/<id>`. */
+	reviewPath: string | null,
+};
+
+/**  What a submit created, and how the steps after the create went. */
+export type PublishOutcome = {
+	/**  The id of the post. */
+	modId: string,
+	/**  The id of the release. */
+	releaseId: string,
+	/**  The page of the post on the site. */
+	modUrl: string,
+	/**  The result of the publish call, or `None` if none was asked for. */
+	publish: PublishResult | null,
+	/**  The result of the stamp write. */
+	stamp: StampResult,
+	/**  Why the release did not refresh every post field that it was asked to. */
+	postUpdateError: string | null,
+};
+
+/**  How an account gets a post published. */
+export type PublishPath = 
+/**  The account publishes without a review. */
+"publish" | 
+/**  The post goes live only through a review that the creator requests on the site. */
+"review";
+
+/**  What the publish dialog asks the server to create. */
+export type PublishRequest = PublishRequest_Serialize | PublishRequest_Deserialize;
+
+/**  What the publish dialog asks the server to create. */
+export type PublishRequest_Deserialize = 
+/**  A new post with its first release, published after the create if `publish` is set. */
+({ kind: "newMod"; newMod: NewMod_Deserialize; publish: PublishAnswer_Deserialize | null }) & { modId?: never; release?: never } | 
+/**  A release of the post `mod_id`. */
+({ kind: "release"; modId: string; release: NewRelease_Deserialize }) & { newMod?: never; publish?: never };
+
+/**  What the publish dialog asks the server to create. */
+export type PublishRequest_Serialize = 
+/**  A new post with its first release, published after the create if `publish` is set. */
+({ kind: "newMod"; newMod: NewMod_Serialize; publish: PublishAnswer_Serialize | null }) & { modId?: never; release?: never } | 
+/**  A release of the post `mod_id`. */
+({ kind: "release"; modId: string; release: NewRelease_Serialize }) & { newMod?: never; publish?: never };
+
+/**  A requirement of publishing that a post does not meet yet. */
+export type PublishRequirement = 
+/**  The post has no thumbnail. */
+"thumbnail" | 
+/**  The post has no release. */
+"release" | 
+/**  The post has no license. */
+"license" | 
+/**  The AI content question has no answer. */
+"ai_disclosure" | 
+/**  A requirement that this build does not know. */
+"unknown";
+
+/**  The result of a publish call. */
+export type PublishResult = 
+/**  The post is public. */
+{ kind: "published" } | 
+/**  The post lacks what `checklist` lists. `review_url` is the page that requests a review. */
+{ kind: "refused"; checklist: PublishChecklist; reviewUrl: string | null } | 
+/**  The publish call failed with `error`. The post and the release exist. */
+{ kind: "failed"; error: RuneforgeError };
+
+/**  What the server read from a packed and uploaded project, and the post it targets first. */
+export type PublishReview = {
+	/**  The project directory that was packed. */
+	projectPath: string,
+	/**  The file name of the package. */
+	fileName: string,
+	/**  The size of the package in bytes. */
+	size: number,
+	/**  The validation warnings of the project. */
+	warnings: string[],
+	/**  The inspection, the findings and the prefill for the target of `choice`. */
+	review: UploadReview,
+	/**  The post that the dialog selects first. */
+	choice: TargetChoice,
+	/**  The posts of the account, for the target picker. */
+	owned: OwnedModPost[],
+};
+
+/**  `GET /api/v1/publishing-context`: the values a release and a new post may take. */
+export type PublishingContext = {
+	/**  The posts that the account may upload to. */
+	ownedPosts: OwnedPostOption[],
+	/**  The game versions a release may target, newest first. */
+	gameVersions: GameVersion[],
+	/**  Whether a new post may be published without a review. */
+	canPublishWithoutReview: boolean,
+	/**  The categories a new post may take. */
+	categories: string[],
+};
+
 /**  Why a document takes no edit. "Where editing is allowed" in docs/ux/BIN_EDITOR.md. */
 export type ReadOnly = 
 /**  A file outside every project. */
@@ -5704,6 +6600,37 @@ export type ReferenceWalkProgress = {
 	hits: number,
 };
 
+/**  The summary of a model file and the index of the mesh that replaces a map mesh in a reimport. */
+export type ReimportInspection = {
+	summary: ModelSummary,
+	/**  The index of the matching mesh. `None` if no mesh matches and the user picks one. */
+	source: number | null,
+};
+
+/**  `GET /api/v1/mods/:modId/releases/:releaseId`: the release and its artifacts. */
+export type Release = {
+	/**  The id of the release. */
+	id: string,
+	/**  The tag of the release. */
+	tag: string,
+	/**  The files of the release. */
+	artifacts: ReleaseArtifact[],
+};
+
+/**  One file of a release. */
+export type ReleaseArtifact = {
+	/**  The id of the artifact. */
+	id: string,
+	/**  The file name. */
+	filename: string,
+	/**  The package format, `modpkg` or `fantome`. */
+	format: string | null,
+	/**  The hex sha256 of the package, once the deep scan has read it. */
+	contentHash: string | null,
+	/**  The verdict of the deep scan, once it has read the package. */
+	health: ArtifactHealth | null,
+};
+
 /**  One published release, as the changelog reads it. */
 export type ReleaseNote = {
 	/**  The tag without its leading `v`. */
@@ -5717,11 +6644,44 @@ export type ReleaseNote = {
 	url: string,
 };
 
+/**  The release fields of a new post that differ from the prefill. */
+export type ReleaseOverrides = ReleaseOverrides_Serialize | ReleaseOverrides_Deserialize;
+
+/**  The release fields of a new post that differ from the prefill. */
+export type ReleaseOverrides_Deserialize = {
+	/**  The tag of the release. */
+	tag?: string | null,
+	/**  The release notes. */
+	notes?: string | null,
+	/**  The game version that the release targets. */
+	gameVersionId?: string | null,
+};
+
+/**  The release fields of a new post that differ from the prefill. */
+export type ReleaseOverrides_Serialize = {
+	/**  The tag of the release. */
+	tag?: string | null,
+	/**  The release notes. */
+	notes?: string | null,
+	/**  The game version that the release targets. */
+	gameVersionId?: string | null,
+};
+
 /**  A page of the release feed, and where the next one starts. */
 export type ReleasePage = {
 	releases: ReleaseNote[],
 	/**  `None` once the feed has no page after this one. */
 	nextPage: number | null,
+};
+
+/**  Where each release field of a prefill came from. */
+export type ReleaseSources = {
+	/**  The source of the tag. */
+	tag: FieldSource,
+	/**  The source of the notes. */
+	notes: FieldSource,
+	/**  The source of the game version. */
+	gameVersionId: FieldSource,
 };
 
 /**  How a pass's fragments reach the target, from the first pass's own fields. */
@@ -5974,6 +6934,8 @@ export type RuleInfo_Deserialize = {
 	 *  [`RuleMeta::severity`].
 	 */
 	severity?: ProblemSeverity | null,
+	/**  The `ltk://` deep link that a panel offers beside this rule's findings. */
+	link?: string | null,
 	/**  Whether this project is one the rule speaks about yet. */
 	state: RuleState,
 };
@@ -5998,6 +6960,8 @@ export type RuleInfo_Serialize = {
 	 *  [`RuleMeta::severity`].
 	 */
 	severity?: ProblemSeverity | null,
+	/**  The `ltk://` deep link that a panel offers beside this rule's findings. */
+	link?: string | null,
 	/**  Whether this project is one the rule speaks about yet. */
 	state: RuleState,
 };
@@ -6057,6 +7021,80 @@ export type Run_Serialize = {
 	problems: Problem_Serialize[],
 	/**  A rule that could not finish, and why. A run never fails as a whole. */
 	failed: RuleFailure_Serialize[],
+};
+
+/**
+ *  Why a call to RuneForge failed.
+ * 
+ *  Sent over IPC whole, as the `error` of the `RUNEFORGE` code, so the frontend switches on
+ *  `kind` and renders the data that a variant carries.
+ */
+export type RuneforgeError = 
+/**  The app has no stored token. */
+{ kind: "NOT_CONNECTED" } | 
+/**  The token is malformed, unknown, revoked or expired. */
+{ kind: "UNAUTHORIZED" } | 
+/**  The token lacks `scope`, or the account may not do this if `scope` is `None`. */
+{ kind: "FORBIDDEN"; scope: Scope | null } | 
+/**  The post or the upload does not exist for the account. */
+{ kind: "NOT_FOUND" } | 
+/**  The server refused the package for `findings`. */
+{ kind: "PACKAGE_REJECTED"; findings: Finding[] } | 
+/**  The post already has the tag. `suggested_tag` is the next free patch. */
+{ kind: "TAG_TAKEN"; suggestedTag: string } | 
+/**  The upload is past the state that the call needs. */
+{ kind: "UPLOAD_STATE" } | 
+/**  The post did not publish. `checklist` lists what it lacks. */
+{ kind: "PUBLISH_REFUSED"; checklist: PublishChecklist } | 
+/**
+ *  An earlier request with the same `Idempotency-Key` differs or still runs, or the post is
+ *  under moderation.
+ */
+{ kind: "CONFLICT" } | 
+/**  The package is over the 1 GiB limit. */
+{ kind: "TOO_LARGE" } | 
+/**
+ *  The server refused the request because the token sent over 120 requests in a minute.
+ *  `retry_after` is in seconds.
+ */
+{ kind: "RATE_LIMITED"; retryAfter: number | null } | 
+/**  The storage host refused the PUT of the package bytes with `status`. */
+{ kind: "STORAGE"; status: number } | 
+/**  The server answered with `status` and an error `code` that has no variant of its own. */
+{ kind: "HTTP"; status: number; code: string } | 
+/**  The answer is not in the shape that the route documents. */
+{ kind: "MALFORMED"; detail: string } | 
+/**  The server was not reached, or the connection broke. */
+{ kind: "OFFLINE"; detail: string } | 
+/**  The user cancelled the publish. */
+{ kind: "CANCELLED" } | 
+/**  The OS credential store failed. */
+{ kind: "CREDENTIAL"; detail: string };
+
+/**  How far the publish of one project to RuneForge has got. Throttled by its emitter. */
+export type RuneforgePublishProgress = {
+	/**  The project directory that the publish packs. */
+	projectPath: string,
+	stage: RuneforgePublishStage,
+	/**  The package bytes sent to storage so far. */
+	bytesSent: number,
+	/**  The size of the package, or 0 before the pack ends. */
+	totalBytes: number,
+};
+
+/**  Where a publish to RuneForge has got to. */
+export type RuneforgePublishStage = "validating" | "packing" | "uploading" | "inspecting" | "complete" | "error";
+
+/**  The RuneForge connection as the Settings section shows it. */
+export type RuneforgeStatus = {
+	/**  The connected account, or `None` while disconnected. */
+	account: ConnectedAccount | null,
+	/**  The server refused the stored token during this session. */
+	rejected: boolean,
+	/**  The base URL of the site. */
+	siteUrl: string,
+	/**  The site page where the user makes and revokes tokens. */
+	tokenPageUrl: string,
 };
 
 /**  A static switch the shader reads as a `$Globals` float rather than a define. */
@@ -6180,6 +7218,19 @@ export type SchemaTexture = {
 	/**  `samplerName`, the shared sampler that overrides a material's address modes. */
 	sharedSampler: string | null,
 };
+
+/**  What a token may do, as the token page lets the creator tick it. */
+export type Scope = 
+/**  Reads the posts of the account, the publishing context and a release. */
+"mods:read" | 
+/**  Creates a mod post from uploads. */
+"mods:write" | 
+/**  Creates uploads and releases. */
+"releases:write" | 
+/**  Publishes a post. */
+"publish" | 
+/**  A scope that this build does not know. */
+"unknown";
 
 /**
  *  Who a search of the game index ranks for. Each keeps its own ticket counter, so a path
@@ -6337,6 +7388,15 @@ export type SessionStarted = {
  */
 export type Settings = Settings_Serialize | Settings_Deserialize;
 
+/**  A reason that a settings backup cannot be written or read. */
+export type SettingsBackupError = 
+/**  The file is not a settings backup. */
+{ kind: "notABackup" } | 
+/**  A newer version of the manager wrote the backup. */
+{ kind: "newerVersion"; version: number; supported: number } | 
+/**  The file cannot be read or written. */
+{ kind: "io"; detail: string };
+
 /**
  *  Application settings: UI/shell preferences plus the flattened core
  *  [`Config`]. The flatten keeps `settings.json` a single document, so the
@@ -6431,6 +7491,12 @@ export type Settings_Deserialize = {
 	 *  upgrading user who completed first run releases ago.
 	 */
 	hasSeenDiagnosticsNotice?: boolean,
+	/**
+	 *  The RuneForge account of the token in the credential store, or `None` while disconnected.
+	 * 
+	 *  Only the RuneForge commands write it. `save_settings` keeps the stored value.
+	 */
+	runeforge?: ConnectedAccount | null,
 } & Config_Deserialize;
 
 /**
@@ -6527,6 +7593,12 @@ export type Settings_Serialize = {
 	 *  upgrading user who completed first run releases ago.
 	 */
 	hasSeenDiagnosticsNotice: boolean,
+	/**
+	 *  The RuneForge account of the token in the credential store, or `None` while disconnected.
+	 * 
+	 *  Only the RuneForge commands write it. `save_settings` keeps the stored value.
+	 */
+	runeforge: ConnectedAccount | null,
 } & Config_Serialize;
 
 /**
@@ -6555,6 +7627,17 @@ export type ShaderFailure = {
 	unnamedPrograms: boolean,
 	/**  The pipeline a material was drawn without, as League wrote it. */
 	missingPipeline: string | null,
+};
+
+/**  A shader def's program, and the defines that select among its permutations. */
+export type ShaderProgram = {
+	/**  The program that the preview draws. */
+	program: MaterialProgram,
+	/**
+	 *  The defines that the shader's two TOCs declare, sorted by name. Empty if a TOC cannot
+	 *  be read.
+	 */
+	declared: DeclaredDefine[],
 };
 
 /**
@@ -6602,6 +7685,16 @@ export type SheetSprite = {
 	 *  nine-slice. None for a plain sprite.
 	 */
 	slice: [number, number, number, number] | null,
+};
+
+/**  A skin bin that a layer ships, and the skin object in it. */
+export type ShippedSkin = {
+	/**  The project directory that the skin and its files are read from first. */
+	project: string,
+	/**  The layer file of `data/characters/<champion>/skins/skin<n>.bin`. */
+	asset: AssetRef,
+	/**  The `SkinCharacterDataProperties` object's hash, `0x` and eight hex digits. */
+	entry: string,
 };
 
 /**  What a translated stage binds. */
@@ -6664,14 +7757,16 @@ export type SkinModel = {
 	/**  `skinAnimationProperties.animationGraphData`, `0x` and eight hex digits. */
 	animationGraph: string | null,
 	/**  `idleParticlesEffects`, in the order the skin lists them. */
-	idleEffects: IdleEffect[],
+	idleEffects: JointEffect[],
+	/**  `PersistentEffectConditions`, in the order the skin lists them. */
+	persistentConditions: PersistentCondition[],
 	/**
-	 *  Every effect key `mResourceResolver` maps to a system some file within reach declares.
+	 *  Every effect key `mResourceResolver` maps to a system that a bin the read reached
+	 *  declares, in key order.
 	 * 
 	 *  A particle event of the graph names a key of this map, and the graph is read from
 	 *  another file, so the map crosses with the skin for the viewport to look the key up.
-	 *  [`resolve_skin`] lists the systems the document itself declares, and
-	 *  [`search_linked_systems`] adds those its linked files declare.
+	 *  [`ObjectLookup::skin`] reads the resolver and its systems from the bins of the lookup.
 	 */
 	effectSystems: EffectSystem[],
 	/**  `skinMeshProperties.rigPoseModifierData`, in the order the skin lists them. */
@@ -6688,6 +7783,17 @@ export type SkippedArchive = {
 	wad: string,
 	why: string,
 };
+
+/**  A count of content of one kind that the importer skipped. */
+export type SkippedItems = {
+	kind: SkippedKind,
+	count: number,
+};
+
+/**  A kind of content that the importer does not convert. */
+export type SkippedKind = "skin" | "blendShape" | "camera" | "light" | "animation" | 
+/**  Points and lines, which draw no triangle. */
+"line";
 
 /**  One entry of `SocketDefinitions`, of any kind of `SocketDefinitionBase`. */
 export type Socket = 
@@ -6777,6 +7883,8 @@ export type SpellPreview = {
 	animationName: string | null,
 	/**  The missile specification, absent for spells without one. */
 	missile: MissileSpec | null,
+	/**  The written `missileSpeed`, in engine units per second. */
+	missileSpeed: number | null,
 	/**  A resource key, never a system-object identity. */
 	effectKey: string | null,
 	/**  The written fallback effect name, retained for inspection. */
@@ -6794,6 +7902,13 @@ export type StageProgram = {
 	/**  The translation came off the disk cache rather than being made now. */
 	cached: boolean,
 };
+
+/**  The result of writing the distributor stamp into the project. */
+export type StampResult = 
+/**  The project config names the post. */
+{ kind: "written" } | 
+/**  The write failed with `detail`. The release exists. */
+{ kind: "failed"; detail: string };
 
 export type StorageMedium = "ssd" | "hdd" | "unknown";
 
@@ -6866,6 +7981,23 @@ export type SubmeshOverride = {
 	material: MaterialPreview | null,
 };
 
+/**  How a suggested post was found. */
+export type SuggestionMatch = 
+/**  The distributor stamp of the package names the post. */
+"distributor" | 
+/**  The post has the display name of the package. */
+"name";
+
+/**  Which owned post a package most likely updates, and the tag its release would get. */
+export type Suggestions = {
+	/**  The suggested post, or `None` if no owned post matches. */
+	modId: string | null,
+	/**  How the suggested post was found. */
+	matchedBy: SuggestionMatch | null,
+	/**  The patch bump of the latest semver release of the suggested post. */
+	nextTag: string | null,
+};
+
 /**  What a surface is made from: an image file, or a sprite an element already draws. */
 export type SurfaceSource = { kind: "file"; path: string } | { kind: "sprite"; texture: AssetRef; uv: [(number | null), (number | null), (number | null), (number | null)] };
 
@@ -6899,6 +8031,23 @@ export type SyncGroup = {
 	hash: string,
 	/**  `mType`. */
 	kind: number,
+};
+
+/**  The post that the publish dialog selects when it opens, and why. */
+export type Target = 
+/**  The project stamp names a post of the account. */
+{ kind: "stamped"; modId: string } | 
+/**  The server suggested a post of the account. */
+{ kind: "suggested"; modId: string; matchedBy: SuggestionMatch } | 
+/**  No post matches, so the publish creates a new one. */
+{ kind: "new" };
+
+/**  The target of a publish, and whether the project stamp names a post the account does not own. */
+export type TargetChoice = {
+	/**  The post that the dialog selects. */
+	target: Target,
+	/**  The post that the project stamp names if the account does not own it. */
+	foreignStamp: string | null,
 };
 
 /**  What carries a system a template made, per ADR-0057. */
@@ -7691,6 +8840,33 @@ export type UniformBlock = {
 	members: BlockMember[],
 };
 
+/**  The axis that points up in a model file. */
+export type UpAxis = "y" | "z";
+
+/**  An upload as its owner sees it. */
+export type Upload = {
+	/**  The id of the upload. */
+	id: string,
+	/**  The file name that the upload was created with. */
+	filename: string,
+	/**  The state of the upload, such as `pending` or `inspected`. */
+	status: string,
+	/**  The package format that the server read, `modpkg` or `fantome`. */
+	format: string | null,
+};
+
+/**  `POST /api/v1/uploads/:id/complete`: what the server read and where the package may go. */
+export type UploadReview = {
+	/**  The inspected upload. */
+	upload: Upload,
+	/**  The findings of the inspection. */
+	findings: Finding[],
+	/**  The post that the package most likely updates. */
+	suggestions: Suggestions,
+	/**  The post and the release that the server proposes for the suggested target. */
+	prefill: Prefill,
+};
+
 /**  Validation result for a project. */
 export type ValidationResult = {
 	valid: boolean,
@@ -7712,16 +8888,18 @@ export type ValueEdit =
 /**  Insert an item into a list, map or option. */
 { type: "insertItem"; path: string; item: NewItem } | 
 /**
- *  Insert a copy of the item at `from` into the list at `path`, at `index` or the end.
- *  `unique` names a string field whose text the copy makes unique among the object's
+ *  Insert a copy of the item at `from` into the list or map at `path`, at `index` or the
+ *  end. `unique` names a string field whose text the copy makes unique among the object's
  *  list items.
  */
-{ type: "copyItem"; from: string; path: string; index: number | null; unique: string | null } | 
+{ type: "copyItem"; from: string; path: string; index: number | null; unique: string | null; 
+/**  The copy's key where `path` is a map, spelled as [`NewItem::key`] spells one. */
+key?: string | null } | 
 /**
- *  Insert the value clipboard `text` carries into the list at `path`, at `index` or the
- *  end, with `unique` as for [`ValueEdit::CopyItem`].
+ *  Insert the value clipboard `text` carries into the list or map at `path`, at `index` or
+ *  the end, with `unique` and `key` as for [`ValueEdit::CopyItem`].
  */
-{ type: "pasteItem"; path: string; index: number | null; text: string; unique: string | null } | 
+{ type: "pasteItem"; path: string; index: number | null; text: string; unique: string | null; key?: string | null } | 
 /**  Remove an item from a list, map or option. */
 { type: "removeItem"; path: string } | 
 /**

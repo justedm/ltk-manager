@@ -28,10 +28,12 @@ use ltk_manager_base::error::{AppError, DomainError, ErrorKind};
 use ltk_manager_base::events::{BackendEvent, EventSink, HashtableSyncProgress};
 use ltk_manager_base::utils::lazy_slot::LazySlot;
 
+mod name_sheets;
 mod object_names;
 
 pub use ltk_hashdb::{HashDb, LayeredHashDb, PathRef};
 pub use ltk_mimir_cache::Table;
+pub use name_sheets::MimirNames;
 pub use object_names::{CacheNames, ObjectNames};
 
 /// Download base for the published hashtable release assets.
@@ -512,6 +514,7 @@ impl HashtableCache {
                     schema_installed: false,
                 })
             }
+            outcome => unreachable!("unhandled hashtable update outcome: {outcome:?}"),
         }
     }
 
@@ -582,6 +585,11 @@ impl HashtableCache {
             tracing::debug!("Hashtable `{table}` unavailable: {e}");
         }
         db
+    }
+
+    /// Every table of the cache, as the name source of the object index's sheets.
+    pub fn names(&self) -> MimirNames {
+        MimirNames::new(self.store.clone())
     }
 
     /// The same tables as [`wad_tables`](Self::wad_tables), as a resolver.
@@ -748,15 +756,20 @@ impl<'a> SyncProgress<'a> {
             total_bytes: run.total_bytes,
         }
     }
+
+    /// Records the table count and total bytes of a run from the size of each planned table.
+    fn plan(&self, sizes: impl ExactSizeIterator<Item = Option<u64>>) {
+        let mut run = self.run();
+        run.tables = sizes.len() as u32;
+        // `Option` sums to `None` if any table is missing a size, which is what
+        // a release published before the field existed looks like.
+        run.total_bytes = sizes.sum();
+    }
 }
 
 impl UpdateObserver for SyncProgress<'_> {
     fn planned(&self, tables: &[PlannedTable]) {
-        let mut run = self.run();
-        run.tables = tables.len() as u32;
-        // `Option` sums to `None` if any table is missing a size, which is what
-        // a release published before the field existed looks like.
-        run.total_bytes = tables.iter().map(|table| table.size_bytes).sum();
+        self.plan(tables.iter().map(|table| table.size_bytes));
     }
 
     fn progressed(&self, table: Table, done: u64, _total: Option<u64>) {

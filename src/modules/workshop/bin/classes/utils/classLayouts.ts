@@ -5,6 +5,7 @@ import type { ReadRequest } from "../../documents/hooks/useBinRead";
 import { nameHash } from "../../shared/utils/binHash";
 import { type ShellKind, shellPanesOf } from "../../shell/utils/shellPanes";
 import { childCount, fieldHash, rowKey } from "../../tree/utils/binRows";
+import type { DefaultField } from "../../vfx/inspector/utils/emitterGroups";
 
 /**
  * How a section draws the fields it names.
@@ -21,12 +22,16 @@ export type SectionWidget =
   | "mesh"
   | "override-rows"
   | "effect-table"
+  | "condition-rows"
   | "emitters"
   | "clips"
   | "material-params"
   | "material-samplers"
   | "material-switches"
-  | "material-macros";
+  | "material-macros"
+  | "shader-params"
+  | "shader-textures"
+  | "shader-switches";
 
 /** Which of a level's answered rows the level under it reads, by field name. */
 export type Select = "all" | readonly string[];
@@ -64,6 +69,8 @@ export interface ClassLayout {
    */
   readonly shell?: ShellKind;
   readonly sections: readonly LayoutSection[];
+  /** The layout lists the fields the object does not author, each at its default. */
+  readonly defaults?: boolean;
 }
 
 /** The frame `layout` draws in, which is the stack unless it names a shell. */
@@ -111,6 +118,33 @@ export const materialLayout: ClassLayout = {
 };
 
 /**
+ * The layout of a `CustomShaderDef`, the material shell with its parameters, textures and
+ * switches as tables. "The material shell" in docs/ux/BIN_EDITOR.md.
+ */
+export const shaderLayout: ClassLayout = {
+  title: m.workshop_bin_layout_shader_label,
+  shell: "material",
+  sections: [
+    {
+      title: m.workshop_bin_section_identity_label,
+      fields: ["objectPath", "ShadingModel", "featureMask", "AdditionalUvSetMask"],
+    },
+    { title: m.workshop_bin_section_params_label, fields: ["parameters"], as: "shader-params" },
+    { title: m.workshop_bin_section_textures_label, fields: ["textures"], as: "shader-textures" },
+    {
+      title: m.workshop_bin_section_switches_label,
+      fields: ["staticSwitches"],
+      as: "shader-switches",
+    },
+    {
+      title: m.workshop_bin_section_feature_defines_label,
+      fields: ["featureDefines"],
+      as: "tree",
+    },
+  ],
+};
+
+/**
  * The skin, which is a hub of links and paths drawn beside the character they build.
  *
  * The mesh and its overrides both hang off `skinMeshProperties`, so two sections place
@@ -149,6 +183,11 @@ export const skinLayout: ClassLayout = {
       as: "effect-table",
     },
     {
+      title: m.workshop_bin_section_conditions_label,
+      fields: ["PersistentEffectConditions", "mResourceResolver"],
+      as: "condition-rows",
+    },
+    {
       title: m.workshop_bin_section_audio_label,
       fields: ["skinAudioProperties"],
       as: "fields",
@@ -168,6 +207,7 @@ export const skinLayout: ClassLayout = {
 export const vfxLayout: ClassLayout = {
   title: m.workshop_bin_layout_vfx_label,
   shell: "vfx",
+  defaults: true,
   sections: [
     {
       title: m.workshop_bin_section_identity_label,
@@ -265,7 +305,7 @@ export const mapContainerLayout: ClassLayout = {
       title: m.workshop_bin_section_identity_label,
       fields: ["mapPath", "boundsMin", "boundsMax", "lowestWalkableHeight"],
     },
-    { title: m.workshop_bin_section_chunks_label, fields: ["chunks"], as: "rows" },
+    /* `chunks` has no section: the outliner lists the chunks with what each holds. */
     { title: m.workshop_bin_section_components_label, fields: ["components"], as: "tree" },
   ],
 };
@@ -334,6 +374,7 @@ export const fontLayout: ClassLayout = {
  */
 const LAYOUTS: ReadonlyMap<string, ClassLayout> = new Map([
   [nameHash("StaticMaterialDef"), materialLayout],
+  [nameHash("CustomShaderDef"), shaderLayout],
   [nameHash("SkinCharacterDataProperties"), skinLayout],
   [nameHash("TftSkinCharacterDataProperties"), skinLayout],
   [nameHash("VfxSystemDefinitionData"), vfxLayout],
@@ -389,6 +430,8 @@ export interface PlacedSection {
   readonly rows: readonly BinRow[];
   /** The fields under the placed row that `fields` draws, in the order it draws them. */
   readonly under: readonly string[];
+  /** The fields the object does not author that the section draws at their defaults. */
+  readonly defaults: readonly DefaultField[];
   /** The last section, which holds what no other named. */
   readonly other: boolean;
 }
@@ -398,20 +441,36 @@ export interface PlacedSection {
  *
  * "A layout is complete" in docs/ux/BIN_EDITOR.md. Other is the field rows of what is
  * left, so a field the game adds in a patch is on screen the day the schema changes,
- * and a field the layout names and the object lacks draws nothing.
+ * and a field the layout names and the object lacks draws nothing unless it is in `defaults`.
+ *
+ * Each of `defaults` goes to the section of field rows that names it, or to Other if no
+ * section names it. A default that a widget's section names is skipped, because the
+ * widget draws that field.
  */
-export function placeRows(roots: readonly BinRow[], layout: ClassLayout): PlacedSection[] {
+export function placeRows(
+  roots: readonly BinRow[],
+  layout: ClassLayout,
+  defaults: readonly DefaultField[] = [],
+): PlacedSection[] {
   const byField = new Map(roots.map((row) => [fieldHash(row.path), row]));
+  const defaultByField = new Map(defaults.map((field) => [field.hash, field]));
   const taken = new Set<string>();
   const placed: PlacedSection[] = [];
 
   for (const section of layout.sections) {
     const rows: BinRow[] = [];
+    const sectionDefaults: DefaultField[] = [];
     for (const hash of sectionFields(section)) {
-      const row = byField.get(hash);
-      if (row === undefined) continue;
-      rows.push(row);
       taken.add(hash);
+
+      const row = byField.get(hash);
+      if (row !== undefined) {
+        rows.push(row);
+        continue;
+      }
+
+      const field = defaultByField.get(hash);
+      if (field !== undefined && section.as === undefined) sectionDefaults.push(field);
     }
     placed.push({
       id: `${section.as ?? "cells"}:${section.fields.join(",")}`,
@@ -419,6 +478,7 @@ export function placeRows(roots: readonly BinRow[], layout: ClassLayout): Placed
       widget: section.as,
       rows,
       under: section.under ?? [],
+      defaults: sectionDefaults,
       other: false,
     });
   }
@@ -429,6 +489,7 @@ export function placeRows(roots: readonly BinRow[], layout: ClassLayout): Placed
     widget: undefined,
     rows: roots.filter((row) => !taken.has(fieldHash(row.path))),
     under: [],
+    defaults: defaults.filter((field) => !taken.has(field.hash)),
     other: true,
   });
   return placed;
@@ -447,17 +508,21 @@ export function sectionCount(
   const lists = (rows: readonly BinRow[]) =>
     rows.reduce((sum, row) => sum + (isList(row) ? childCount(row) : 0), 0);
 
-  if (section.other) return section.rows.length;
+  if (section.other) return section.rows.length + section.defaults.length;
   switch (section.widget) {
     case "rows":
     case "emitters":
     case "material-params":
     case "material-samplers":
     case "material-switches":
+    case "shader-params":
+    case "shader-textures":
+    case "shader-switches":
       return lists(section.rows);
     case "material-macros":
       return section.rows.reduce((sum, row) => sum + childCount(row), 0);
     case "effect-table":
+    case "condition-rows":
       return lists(section.rows.filter((row) => fieldHash(row.path) !== EFFECT.resolver));
     case "override-rows":
       return lists(
@@ -493,6 +558,9 @@ const DESCENT: Record<SectionWidget, Descent> = {
   /* The elements alone. The tree fetches what sits under each of them itself. */
   rows: ["all"],
   "effect-table": ["all", "all"],
+  /* The third level is each driver's fields, which the condition's row is summarized by. The
+     effects and the submeshes are read when the row is unfolded. */
+  "condition-rows": ["all", "all", ["OwnerCondition", "SourceCondition"]],
   /* The third level is each override's fields, which name the submesh its row is titled by. */
   "override-rows": [["materialOverride"], "all", "all"],
   emitters: ["all", ["CustomMaterial"], "all"],
@@ -504,6 +572,9 @@ const DESCENT: Record<SectionWidget, Descent> = {
   "material-switches": ["all", "all"],
   /* A macro is a map entry, which holds its value itself. */
   "material-macros": ["all"],
+  "shader-params": ["all", "all"],
+  "shader-textures": ["all", "all"],
+  "shader-switches": ["all", "all"],
 };
 
 /** How far under its own fields a section's widget reads. Nothing, without one. */
@@ -603,4 +674,16 @@ export const EFFECT = {
   targetBone: nameHash("targetBoneName"),
   resolver: nameHash("mResourceResolver"),
   resourceMap: nameHash("resourceMap"),
+} as const;
+
+/** The fields of one persistent condition, and the driver fields its row is summarized by. */
+export const CONDITION = {
+  list: nameHash("PersistentEffectConditions"),
+  effects: nameHash("PersistentVfxs"),
+  owner: nameHash("OwnerCondition"),
+  source: nameHash("SourceCondition"),
+  shown: nameHash("SubmeshesToShow"),
+  hidden: nameHash("SubmeshesToHide"),
+  spell: nameHash("Spell"),
+  drivers: nameHash("mDrivers"),
 } as const;

@@ -160,6 +160,7 @@ services! {
         open_asset_in_ritobin,
         // Programs
         read_material_programs,
+        read_shader_program,
         read_engine_program,
         // Maps
         read_map,
@@ -167,17 +168,33 @@ services! {
         read_map_characters,
         read_map_variants,
         read_map_outline,
+        read_map_name_references,
+        map_geometry_open,
+        map_geometry_close,
+        map_geometry_meshes,
+        map_geometry_edit,
+        map_geometry_step,
+        map_geometry_save,
+        map_geometry_export,
+        map_geometry_reimport_inspect,
+        map_import_inspect,
+        map_import_materials,
         locate_map_files,
         locate_files_near,
         // Skins
         read_skin,
+        locate_mod_skin,
         read_animation_graph,
         read_clip_header,
         bake_skin_tangents,
         save_skin_colliders,
+        // Objects
+        locate_object,
         // Spells and VFX
         read_spell,
         read_vfx_system,
+        vfx_missile_spells,
+        vfx_child_targets,
         vfx_templates,
     }
     settings("settings") {
@@ -191,13 +208,18 @@ services! {
         list_available_wads,
         list_forcible_map_skins,
         list_map_decorations,
+        export_settings,
+        read_settings_backup,
+        plan_data_move,
+        move_data,
+        data_usage,
+        clear_data_area,
     }
     patcher("patcher") {
         start_patcher,
         stop_patcher,
         rebuild_overlay,
         get_patcher_status,
-        get_linked_bin_offenders,
         get_checksum_mismatches,
     }
     launcher("launcher") {
@@ -249,6 +271,22 @@ services! {
         take_pending_deep_link,
         take_pending_opened_files,
     }
+    runeforge("runeforge") {
+        // Account
+        runeforge_status,
+        runeforge_connect,
+        runeforge_disconnect,
+        runeforge_owned_mods,
+        runeforge_context,
+        // Publish
+        runeforge_prepare,
+        runeforge_cancel,
+        runeforge_prefill,
+        runeforge_discard,
+        runeforge_submit,
+        runeforge_publish,
+        runeforge_release,
+    }
     news("news") {
         list_releases,
         list_announcements,
@@ -259,6 +297,8 @@ services! {
         get_workshop_projects,
         get_workshop_project,
         create_project,
+        list_map_starts,
+        create_map_project,
         edit_project,
         rename_workshop_project,
         delete_workshop_project,

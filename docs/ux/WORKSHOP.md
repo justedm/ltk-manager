@@ -4,6 +4,7 @@
 
 | Date       | Change                                                                    |
 | ---------- | ------------------------------------------------------------------------- |
+| 2026-10-27 | Add Publish to RuneForge on the card menu and the editor overflow menu    |
 | 2026-10-06 | Draw the view control and the picks in a footer under the list            |
 | 2026-10-06 | Fold the title bar's navigation to icons, then drop the wordmark          |
 | 2026-10-06 | Draw the title bar on the workshop's ground, and the grid in a page inset |
@@ -15,7 +16,6 @@
 | 2026-09-10 | Climb out of a directory a tab opened inside, rather than out of the tab  |
 | 2026-09-10 | Record an explorer's directory as a stop of its own                       |
 | 2026-09-07 | Put one menu on the card's right click and its kebab, and add Rename      |
-| 2026-08-24 | Fold the one-shell implementation plan into this document                 |
 
 Each edit of this document adds a row at the top. The table keeps the last ten rows.
 
@@ -200,8 +200,8 @@ scrolls inside it, and the filter chips draw on the ground over it.
 
 On both routes the title bar draws on that ground with no line under it, as the status row
 already does. The seams around the islands then run into the frame on all four sides, and the
-islands read as set into one surface. Every other page keeps the title bar one rung up with its
-hairline.
+islands read as set into one surface. Home and the mod library draw the title bar on the ground in
+the same way. Every other page keeps the title bar one rung up with its hairline.
 
 ## The keys
 
@@ -604,6 +604,13 @@ ahead of them - the file preview a back had just stepped off - and stand its own
 place. Only a move writes: descending, going up, a crumb, a typed path.
 
 Closing a tab drops its directories with it, because they were only ever stops in that tab.
+Where the drop leaves two stops of one tab adjacent, the second goes too, so no arrow press
+lands on the tab it started on.
+
+A tab whose document id changes keeps its stops under the new id. A layer rename and a sandbox
+switch both change the id and leave the tab in place.
+
+An arrow steps over a stop whose tab is gone and lands on the next stop behind it.
 
 A walk that lands in another project routes to it, so the store returns the stop it reached
 rather than leaving a caller to re-read an index the next walk can race.
@@ -617,6 +624,44 @@ across the whole shell.
 
 The grid records itself from the route rather than from the resolved project, which arrives a
 frame later - a deep link into a project would otherwise record a grid the user never stood on.
+
+## Publishing to RuneForge
+
+"Publish to RuneForge" is on the card menu and on the overflow menu of the editor header. It packs
+the project in the format of the pack target, `.modpkg` when the target is both, uploads the
+package and creates a post or a release on RuneForge. The contract is `docs/PUBLIC_API.md` in
+`runeforge-io/runeforge`, and the plan is `specs/019-runeforge-publishing/spec.md`.
+
+### The connection
+
+The RuneForge card in Settings, on the Workshop tab, connects an account with a pasted API token.
+The token is checked with `GET /api/v1/me` before Windows stores it (ADR-0070). The card then shows
+the account, the token prefix and the scopes, and a warning lists the scopes that publishing uses
+and the token lacks. A token that RuneForge refuses marks the card with Reconnect. Without an
+account, "Publish to RuneForge" opens the Settings tab instead of the dialog.
+
+### The dialog
+
+| State     | What it shows                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| Preparing | The stage (validating, packing, uploading, inspecting) and the bytes sent, with Cancel             |
+| Review    | The target post, the tag, the notes, the game version, the fields to refresh and the findings      |
+| Done      | "Open on RuneForge", the publish result or the checklist that refused it, and the scan of the file |
+
+- A validation error of the project stops the publish before any request. A refused package shows
+  its findings, and Publish stays disabled while a finding is an error.
+- The target is the post that the project stamp names if the account owns it, else the post that
+  RuneForge suggests, else a new post. Picking another target reads its prefill again.
+- A taken tag offers the next free tag as one press.
+- A release refreshes no post field unless the creator ticks it, and "Set mod status to Working"
+  is on.
+- "Publish now" is offered for a new post when the token has the `publish` scope. A refused
+  publish lists what the post lacks. If RuneForge asks the AI content question, the dialog asks it,
+  and an account that publishes through a review gets a link to the post page.
+- A close while the project prepares cancels the run, and a close in the review deletes the
+  upload.
+- After the create, the project config gets a `distributor` stamp with the post id, so the next
+  publish of the project targets the same post.
 
 ## How it is built
 

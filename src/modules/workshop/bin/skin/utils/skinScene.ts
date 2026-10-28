@@ -2,7 +2,7 @@ import type {
   AssetRef,
   GraphClip,
   HashRef,
-  IdleEffect,
+  JointEffect,
   KeyRef,
   MaterialPreview,
   MaterialProgram,
@@ -18,9 +18,9 @@ import {
   type SubmeshProgram,
 } from "@/modules/viewport";
 
-import { assetKey } from "../../../preview/utils/assetRef";
 import { nameHash } from "../../shared/utils/binHash";
 import type { SystemModel } from "../../vfx/engine/model/model";
+import { EFFECTS_QUALITY, type EffectsQuality } from "../../vfx/engine/model/quality";
 import type { Anchor, Joints, RigModel } from "../../vfx/engine/model/rig";
 import { readVfxSystem } from "../../vfx/engine/parsing/readVfxSystem";
 import type { ParticleCue } from "./clipEvents";
@@ -167,32 +167,14 @@ export function bindingOf<T>(
   };
 }
 
-/** The materials one program read is asked for, and the file declaring them. */
-export interface MaterialRead {
-  /** The linked file declaring the materials, and null for the skin's own bin. */
-  readonly source: AssetRef | null;
-  readonly hashes: readonly string[];
-}
-
-/**
- * Every material the skin draws with, each once, grouped by the file declaring it, as the
- * program reads are asked for them. The skin's own bin comes first where it declares any.
- */
-export function materialReads(skin: SkinModel): MaterialRead[] {
+/** Returns every material the skin draws with, each once, in the order the skin names them. */
+export function materialHashes(skin: SkinModel): string[] {
   const materials = [skin.material, ...skin.overrides.map((override) => override.material)];
-  const reads = new Map<string, { source: AssetRef | null; hashes: Set<string> }>();
+  const hashes = new Set<string>();
   for (const material of materials) {
-    if (material === null || material.missing) continue;
-
-    const key = material.source === null ? "" : assetKey(material.source);
-    const read = reads.get(key) ?? { source: material.source, hashes: new Set<string>() };
-    read.hashes.add(material.hash);
-    reads.set(key, read);
+    if (material !== null && !material.missing) hashes.add(material.hash);
   }
-
-  return [...reads.values()]
-    .sort((a, b) => Number(a.source !== null) - Number(b.source !== null))
-    .map(({ source, hashes }) => ({ source, hashes: [...hashes] }));
+  return [...hashes];
 }
 
 /**
@@ -224,7 +206,7 @@ export function submeshMaterial(skin: SkinModel, submesh: string): MaterialPrevi
  * It runs once, because the engine creates an idle effect once and the system's own
  * emitters loop. A target the skeleton lacks aims nowhere.
  */
-export function idleRig(pose: Pose, effect: IdleEffect, scale: number): RigModel {
+export function jointRig(pose: Pose, effect: JointEffect, scale: number): RigModel {
   const [x, y, z] = effect.position;
   const aim = effect.targetBone === "" ? -1 : pose.jointNamed(effect.targetBone);
   return {
@@ -285,7 +267,7 @@ export function jointSlot(pose: Pose, ref: HashRef | null): number {
 }
 
 /** `pose`'s joints by name without regard to case, each anchor built once, `shift` seconds late. */
-function jointsOf(pose: Pose, scale: number, shift = 0): Joints {
+export function jointsOf(pose: Pose, scale: number, shift = 0): Joints {
   const cache = new Map<string, Anchor | null>();
   return (name) => {
     const key = name.toLowerCase();
@@ -306,13 +288,25 @@ function jointsOf(pose: Pose, scale: number, shift = 0): Joints {
   };
 }
 
-const MODELS = new WeakMap<VfxSystem, SystemModel>();
+const MODELS = new WeakMap<VfxSystem, SystemModel[]>();
 
-/** The renderer's model of one read, the same object for as long as the read is. */
-export function systemModel(read: VfxSystem): SystemModel {
-  const held = MODELS.get(read);
+/**
+ * Returns the renderer's model of `read` at `quality`, the same object for as long as the
+ * read is.
+ */
+export function systemModel(
+  read: VfxSystem,
+  quality: EffectsQuality = EFFECTS_QUALITY.veryHigh,
+): SystemModel {
+  let models = MODELS.get(read);
+  if (models === undefined) {
+    models = [];
+    MODELS.set(read, models);
+  }
+
+  const held = models[quality];
   if (held !== undefined) return held;
-  const model = readVfxSystem(read);
-  MODELS.set(read, model);
+  const model = readVfxSystem(read, quality);
+  models[quality] = model;
   return model;
 }

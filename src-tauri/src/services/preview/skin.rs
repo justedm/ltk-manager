@@ -3,18 +3,20 @@
 
 use std::path::Path;
 
-use super::material::shader_defs;
+use crate::data_location::{data_dir, MOD_PREVIEWS};
 use crate::error::IpcResult;
-use crate::services::shared::document_assets::{parse_entry, read_resolved, with_resolution};
-use crate::services::shared::{linked_assets, linked_reader, read_asset};
+use crate::mods::ModLibraryState;
+use crate::services::shared::document_assets::{parse_entry, read_lookup, read_resolved};
+use crate::services::shared::read_asset;
 use crate::services::shared::{off_thread, WriteTarget};
+use crate::state::SettingsState;
 use ltk_manager_assets::preview::{clip_header, AssetRef, ClipHeader};
 use ltk_manager_base::error::AppError;
 use ltk_manager_bin::bin_document::{BinDocumentError, BinDocumentId, BinDocuments};
-use ltk_manager_bin::sandbox::SandboxState;
+use ltk_manager_bin::sandbox::{SandboxRef, SandboxState};
+use ltk_manager_game::lookup::ObjectLookup;
 use ltk_manager_game::skin::{
-    bake_mesh_tangents, graph_at, resolve_skin, save_colliders, search_linked,
-    search_linked_materials, search_linked_systems, AnimationGraph, ColliderShapes, GraphRead,
+    bake_mesh_tangents, save_colliders, shipped_skin, AnimationGraph, ColliderShapes, ShippedSkin,
     SkinModel,
 };
 use tauri::{AppHandle, Manager};
@@ -37,7 +39,7 @@ pub async fn bake_skin_tangents(
             .asset_of(document)
             .ok_or(BinDocumentError::NotOpen(document))?;
         let mesh = read_resolved(&app_handle, document, |open, names, assets| {
-            let model = resolve_skin(open, entry, names, assets, None)?;
+            let model = ObjectLookup::single(open, names, assets, None).skin(entry)?;
             model.mesh.and_then(|mesh| mesh.asset).ok_or_else(|| {
                 AppError::ValidationFailed("The skin has no resolved mesh".to_owned())
             })
@@ -87,9 +89,8 @@ pub async fn save_skin_colliders(
 ///
 /// `entry` is the `SkinCharacterDataProperties` object's hash as `0x` and eight hex
 /// digits. The shader defs are read beside the skin, the project's copy first, and a
-/// read they refuse leaves every material on its own fields. A material or an effect
-/// system the document does not declare is looked for through the files it links, as a
-/// graph is.
+/// read they refuse leaves every material on its own fields. A material, the resolver or an
+/// effect system that the document does not declare is read from the files it links.
 #[tauri::command]
 #[specta::specta]
 pub async fn read_skin(
@@ -99,22 +100,43 @@ pub async fn read_skin(
 ) -> IpcResult<SkinModel> {
     off_thread(move || {
         let entry = parse_entry(&entry)?;
-        read_resolved(&app_handle, document, |open, names, assets| {
-            let mut read = linked_reader(&app_handle);
-            let shaders = shader_defs(&app_handle, assets);
-            let mut model = resolve_skin(open, entry, names, assets, shaders.as_deref())?;
-            let linked: Vec<AssetRef> = linked_assets(open, assets);
-            search_linked_materials(
-                &mut model,
-                linked.clone(),
-                names,
-                assets,
-                shaders.as_deref(),
-                &mut read,
-            );
-            search_linked_systems(&mut model, open, entry, linked, assets, &mut read);
-            Ok(model)
-        })
+        read_lookup(&app_handle, document, |lookup| Ok(lookup.skin(entry)?))
+    })
+    .await
+}
+
+/// Returns the skin whose bin the installed mod `mod_id` ships, and `None` if it ships none.
+///
+/// An Archive-storage mod is read from a copy unpacked under the app's data directory, which
+/// leaves its storage unchanged. The copy is scanned again on each call, so an updated mod
+/// returns its current files.
+///
+/// # Errors
+///
+/// Fails if the mod is not in the library or its content cannot be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn locate_mod_skin(
+    mod_id: String,
+    app_handle: AppHandle,
+) -> IpcResult<Option<ShippedSkin>> {
+    let config = app_handle.state::<SettingsState>().config();
+    let library = app_handle.state::<ModLibraryState>().0.clone();
+
+    off_thread(move || {
+        let cache = data_dir(&app_handle, &config)
+            .ok_or_else(|| AppError::Other("The data directory is unavailable".to_owned()))?
+            .join(MOD_PREVIEWS);
+
+        let project = library.mod_content_dir(&config, &mod_id, &cache)?;
+        let project = project.to_string_lossy().into_owned();
+
+        let sandboxes = app_handle.state::<SandboxState>();
+        sandboxes.invalidate(&project);
+
+        Ok(shipped_skin(
+            &sandboxes.get(&SandboxRef::Project { project }),
+        ))
     })
     .await
 }
@@ -133,16 +155,7 @@ pub async fn read_animation_graph(
 ) -> IpcResult<AnimationGraph> {
     off_thread(move || {
         let entry = parse_entry(&entry)?;
-        with_resolution(&app_handle, Some(document), |names, assets| {
-            let open = app_handle.state::<BinDocuments>().document(document)?;
-            let linked = match graph_at(&open, entry, names, assets)? {
-                GraphRead::Found(graph) => return Ok(graph),
-                GraphRead::Linked(linked) => linked,
-            };
-
-            let mut read = linked_reader(&app_handle);
-            Ok(search_linked(linked, entry, names, assets, &mut read)?)
-        })
+        read_lookup(&app_handle, document, |lookup| Ok(lookup.graph(entry)?))
     })
     .await
 }

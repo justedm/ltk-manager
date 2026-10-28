@@ -10,6 +10,7 @@ import type {
   MaterialSource,
   ParticleDefine,
   ParticleShader,
+  PreviewMaterial,
   ProgramOptions,
   SandboxRef,
   ProjectMetadata,
@@ -33,6 +34,7 @@ import { commands as news } from "@/lib/ipc/news";
 import { commands as objects } from "@/lib/ipc/objects";
 import { commands as patcher } from "@/lib/ipc/patcher";
 import { commands as preview } from "@/lib/ipc/preview";
+import { commands as runeforge } from "@/lib/ipc/runeforge";
 import { commands as settings } from "@/lib/ipc/settings";
 import { commands as workshop } from "@/lib/ipc/workshop";
 import { map as mapResult } from "@/utils/result";
@@ -69,6 +71,14 @@ export type {
   StoredVerdict_Serialize as StoredVerdict,
   Verdict_Serialize as Verdict,
 } from "@/lib/bindings";
+/* A request type is one the frontend builds and a command reads, so its deserialize side takes the
+plain name. */
+export type {
+  NewMod_Deserialize as NewMod,
+  NewRelease_Deserialize as NewRelease,
+  PublishAnswer_Deserialize as PublishAnswer,
+  PublishRequest_Deserialize as PublishRequest,
+} from "@/lib/bindings";
 export type { Result } from "@/utils/result";
 
 /** A project's metadata and the project it is written to. */
@@ -92,6 +102,22 @@ export const api = {
   listAnnouncements: news.listAnnouncements,
   listNotices: news.listNotices,
 
+  // The RuneForge account and the publish of a project to it.
+  runeforge: {
+    status: runeforge.runeforgeStatus,
+    connect: runeforge.runeforgeConnect,
+    disconnect: runeforge.runeforgeDisconnect,
+    ownedMods: runeforge.runeforgeOwnedMods,
+    context: runeforge.runeforgeContext,
+    prepare: runeforge.runeforgePrepare,
+    cancel: runeforge.runeforgeCancel,
+    prefill: runeforge.runeforgePrefill,
+    discard: runeforge.runeforgeDiscard,
+    submit: runeforge.runeforgeSubmit,
+    publish: runeforge.runeforgePublish,
+    release: runeforge.runeforgeRelease,
+  },
+
   // Settings
   getSettings: settings.getSettings,
   getDefaultSettings: settings.getDefaultSettings,
@@ -103,6 +129,12 @@ export const api = {
   listAvailableWads: settings.listAvailableWads,
   listForcibleMapSkins: settings.listForcibleMapSkins,
   listMapDecorations: settings.listMapDecorations,
+  planDataMove: settings.planDataMove,
+  moveData: settings.moveData,
+  dataUsage: settings.dataUsage,
+  clearDataArea: settings.clearDataArea,
+  exportSettings: settings.exportSettings,
+  readSettingsBackup: settings.readSettingsBackup,
 
   // Mods
   getInstalledMods: library.getInstalledMods,
@@ -156,7 +188,6 @@ export const api = {
   stopPatcher: patcher.stopPatcher,
   rebuildOverlay: patcher.rebuildOverlay,
   getPatcherStatus: patcher.getPatcherStatus,
-  getLinkedBinOffenders: patcher.getLinkedBinOffenders,
   getChecksumMismatches: patcher.getChecksumMismatches,
 
   // Launcher
@@ -281,6 +312,9 @@ export const api = {
     classDocs: bin.classDocs,
     syncMetaDocs: bin.syncMetaDocs,
     readVfxSystem: preview.readVfxSystem,
+    locateObject: preview.locateObject,
+    vfxChildTargets: preview.vfxChildTargets,
+    vfxMissileSpells: preview.vfxMissileSpells,
     vfxTemplates: preview.vfxTemplates,
     readUiView: atlas.readUiView,
     readUiSceneView: atlas.readUiSceneView,
@@ -309,6 +343,7 @@ export const api = {
     ) => atlas.atlasPatchSprite(document, page, [...uv], source),
     atlasSheet: atlas.atlasSheet,
     readSkin: preview.readSkin,
+    locateModSkin: preview.locateModSkin,
     readMaterialPrograms: (
       source: MaterialSource,
       entries: readonly string[],
@@ -319,6 +354,13 @@ export const api = {
         entries.map((entry) => ({ kind: "object" as const, entry })),
         options,
       ),
+    readShaderProgram: (
+      document: BinDocumentId,
+      entry: string,
+      material: PreviewMaterial | null,
+      defines: readonly string[],
+      options: ProgramOptions,
+    ) => preview.readShaderProgram(document, entry, material, [...defines], options),
     readEmbeddedMaterialProgram: (
       source: MaterialSource,
       entry: string,
@@ -347,6 +389,17 @@ export const api = {
     readMapCharacters: preview.readMapCharacters,
     readMapVariants: preview.readMapVariants,
     readMapOutline: preview.readMapOutline,
+    readMapNameReferences: preview.readMapNameReferences,
+    mapGeometryOpen: preview.mapGeometryOpen,
+    mapGeometryClose: preview.mapGeometryClose,
+    mapGeometryMeshes: preview.mapGeometryMeshes,
+    mapGeometryEdit: preview.mapGeometryEdit,
+    mapGeometryStep: preview.mapGeometryStep,
+    mapGeometrySave: preview.mapGeometrySave,
+    mapGeometryExport: preview.mapGeometryExport,
+    mapGeometryReimportInspect: preview.mapGeometryReimportInspect,
+    mapImportInspect: preview.mapImportInspect,
+    mapImportMaterials: preview.mapImportMaterials,
     locateFilesNear: (sandbox: SandboxRef, paths: readonly string[]) =>
       preview.locateFilesNear(sandbox, [...paths]),
     locateMapFiles: preview.locateMapFiles,
@@ -448,6 +501,8 @@ export const api = {
   // Workshop
   getWorkshopProjects: workshop.getWorkshopProjects,
   createWorkshopProject: (args: CreateProjectArgs) => workshop.createProject({ kind: "new", args }),
+  listMapStarts: workshop.listMapStarts,
+  createMapProject: workshop.createMapProject,
   getWorkshopProject: workshop.getWorkshopProject,
   getProjectContentTree: workshop.getProjectContentTree,
   saveProjectConfig: ({ projectPath, ...metadata }: SaveProjectConfigArgs) =>

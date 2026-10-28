@@ -239,6 +239,31 @@ impl From<ltk_mod_project::ImportProgress<'_>> for FantomeImportProgress {
     }
 }
 
+/// Stage of a move of the data directory to another folder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub enum DataMoveStage {
+    /// The entries are being renamed or copied into the new folder.
+    Moving,
+    /// The entries are in the new folder and the app restarts on the new location.
+    Restarting,
+}
+
+/// Progress of a move of the data directory to another folder.
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct DataMoveProgress {
+    pub stage: DataMoveStage,
+    /// Name of the entry being moved, under the data directory.
+    pub current_entry: Option<String>,
+    /// Bytes moved so far.
+    pub moved: u64,
+    /// Bytes that the whole move carries.
+    pub total: u64,
+}
+
 /// Progress of a hashtable sync, as its tables stream in.
 ///
 /// Every figure describes the whole run rather than the table in flight, so a
@@ -338,6 +363,33 @@ pub struct ProtocolInstallProgress {
     pub error: Option<String>,
 }
 
+/// Where a publish to RuneForge has got to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub enum RuneforgePublishStage {
+    Validating,
+    Packing,
+    Uploading,
+    Inspecting,
+    Complete,
+    Error,
+}
+
+/// How far the publish of one project to RuneForge has got. Throttled by its emitter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct RuneforgePublishProgress {
+    /// The project directory that the publish packs.
+    pub project_path: String,
+    pub stage: RuneforgePublishStage,
+    /// The package bytes sent to storage so far.
+    pub bytes_sent: u64,
+    /// The size of the package, or 0 before the pack ends.
+    pub total_bytes: u64,
+}
+
 /// Declares [`BackendEvent`] and its event names from a single list.
 ///
 /// Each entry is `Variant(Payload) => "event-name"`, or `Variant => "event-name"`
@@ -384,8 +436,6 @@ macro_rules! declare_events {
 declare_events! {
     /// An overlay build advanced. Emitted per file, so sinks must be cheap.
     OverlayProgress(OverlayProgress) => "overlay-progress",
-    /// The set of mods with unresolved linked-bin dependencies changed.
-    LinkedBinsUpdated => "linked-bins-updated",
     /// The set of chunks whose containers claimed wrong checksums changed.
     ChecksumMismatchesUpdated => "checksum-mismatches-updated",
     /// Per-mod WAD analysis results changed.
@@ -421,6 +471,8 @@ declare_events! {
     GitImportProgress(GitImportProgress) => "git-import-progress",
     /// The download an install link started advanced.
     ProtocolInstallProgress(ProtocolInstallProgress) => "protocol-install-progress",
+    /// A publish of a project to RuneForge advanced. Throttled by its emitter.
+    RuneforgePublishProgress(RuneforgePublishProgress) => "runeforge-publish-progress",
     /// A League launch request advanced.
     LaunchProgress(LaunchProgress) => "launch-progress",
     /// The Riot Client opened a session for League. Emitted once per session,
@@ -436,6 +488,8 @@ declare_events! {
     SessionEnded(SessionEnded) => "session-ended",
     /// A hashtable sync advanced. Throttled by its emitter.
     HashtableSyncProgress(HashtableSyncProgress) => "hashtable-sync-progress",
+    /// A move of the data directory advanced. Throttled by its emitter.
+    DataMoveProgress(DataMoveProgress) => "data-move-progress",
     /// An extract of game chunks to disk advanced. Throttled by its emitter.
     ExtractProgress(ExtractProgress) => "extract-progress",
     /// A walk of the bins for references advanced. Throttled by its emitter.

@@ -1,14 +1,16 @@
 //! Every archive of an install, folded into one directory tree.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap};
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use ltk_game_index::ChunkRow;
 use ltk_hashdb::LayeredHashDb;
 use ltk_wad::{WadHash, hex_name};
 use serde::{Deserialize, Serialize};
 
-use crate::game_wads::{GameArchives, WadSource};
+use crate::game_wads::{ChunkIndex, GameArchives, WadSource};
 use ltk_manager_base::error::AppResult;
 use ltk_manager_base::generation::{Generation, STALE_CHECK_INTERVAL, line};
 use ltk_manager_base::matcher::{FindQuery, Query, Range, SearchHits, letter_mask, mask_covers};
@@ -172,27 +174,44 @@ pub type PathSearchGeneration = Generation<line::PathField>;
 /// Every archive of an install merged into one deduplicated directory tree.
 ///
 /// A chunk several archives carry is one file here. The game ships the same
-/// copy of a shared chunk in every archive that needs it, so the first read
-/// wins and the rest are dropped.
+/// copy of a shared chunk in every archive that needs it, so the file keeps
+/// the first archive that contains it.
 ///
-/// Built once and read many times. A build walks every archive of the install
-/// and costs seconds, while [`read_dir`](Self::read_dir) is a lookup.
+/// Built once and read many times from a [`ChunkIndex`]. A build resolves the
+/// path of every chunk of the install, while [`read_dir`](Self::read_dir) is a
+/// lookup.
+///
+/// Every name sits in one string and every directory's files and children in
+/// one array each, because an install holds close to a million chunks and an
+/// allocation per name doubles what the index costs.
 #[derive(Debug)]
 pub struct GameIndex {
     /// Directory arena. Index 0 is the root.
     dirs: Vec<Dir>,
-    /// Chunks no hash table names, which have no directory to sit in.
+    /// Every named file, with the files of one directory together in natural order.
+    files: Vec<File>,
+    /// Every subdirectory, with the children of one directory together in byte order.
+    children: Vec<Child>,
+    /// Chunks no hash table names, which have no directory to sit in, in hash order.
     unknown: Vec<File>,
+    /// The name of every file and directory, end to end.
+    names: String,
     /// Archive names, in merge order. A file's `wad` indexes this.
     wads: Vec<String>,
 }
 
+/// A run of [`GameIndex::files`] or [`GameIndex::children`].
+#[derive(Debug, Default, Clone, Copy)]
+struct Span {
+    start: u32,
+    len: u32,
+}
+
 #[derive(Debug, Default)]
 struct Dir {
-    /// Keyed by name. A listing re-sorts them, since it wants natural order.
-    children: BTreeMap<String, usize>,
-    files: Vec<File>,
-    /// Files at or below this directory, filled once the whole tree is in.
+    children: Span,
+    files: Span,
+    /// Files at or below this directory.
     file_count: u32,
     /// Every letter below this directory: its files' names and its descendants'.
     ///
@@ -203,57 +222,90 @@ struct Dir {
     subtree_mask: u32,
 }
 
+/// One subdirectory: its name in [`GameIndex::names`] and its index in [`GameIndex::dirs`].
+#[derive(Debug)]
+struct Child {
+    name_at: u32,
+    name_len: u32,
+    dir: u32,
+}
+
 #[derive(Debug)]
 struct File {
-    name: String,
     path_hash: u64,
-    size_bytes: u64,
-    /// Index into [`GameIndex::wads`].
-    wad: u32,
-    /// The letters of `name`, which fills the padding this struct already had.
+    /// The offset of the name in [`GameIndex::names`].
+    name_at: u32,
+    size_bytes: u32,
+    /// The letters of the name.
     mask: u32,
+    name_len: u16,
+    /// Index into [`GameIndex::wads`].
+    wad: u16,
+}
+
+/// A [`GameIndex`] while the build inserts into it.
+#[derive(Debug)]
+struct Builder {
+    dirs: Vec<BuildDir>,
+    unknown: Vec<File>,
+    names: String,
+    file_count: usize,
+}
+
+#[derive(Debug, Default)]
+struct BuildDir {
+    children: BTreeMap<String, usize>,
+    files: Vec<File>,
 }
 
 impl GameIndex {
     /// Merge every archive of one source into one tree.
     ///
-    /// An archive that cannot be read is logged and skipped, because one
-    /// corrupt file in an install is not a reason to show no tree at all.
+    /// Builds the chunk index of `archives` without a cache, then calls
+    /// [`over`](Self::over).
     ///
     /// # Errors
     ///
-    /// Fails when the archives cannot be enumerated, which is the condition
-    /// [`GameArchives::list`] reports.
+    /// Fails if [`GameArchives::chunk_index`] fails.
     pub fn build(archives: &GameArchives, resolver: &LayeredHashDb) -> AppResult<Self> {
-        let wads = archives.list()?;
+        Ok(Self::over(&archives.chunk_index(None)?, resolver))
+    }
 
-        let mut index = Self {
-            dirs: vec![Dir::default()],
+    /// Merges every chunk of `chunks` into one tree, with the paths that `resolver` resolves.
+    ///
+    /// A chunk that several archives contain is one file, read from the first of them.
+    pub fn over(chunks: &ChunkIndex, resolver: &LayeredHashDb) -> Self {
+        let mut builder = Builder {
+            dirs: vec![BuildDir::default()],
             unknown: Vec::new(),
-            wads: wads.iter().map(|wad| wad.name.clone()).collect(),
+            names: String::new(),
+            file_count: 0,
         };
 
-        /* By hash rather than by path: an unnamed chunk has no path to compare,
-        and the hash is what makes two archives' copies the same file. */
-        let mut seen: HashSet<u64> = HashSet::new();
-
-        for (ordinal, wad) in wads.iter().enumerate() {
-            let ordinal = ordinal as u32;
-            let read = archives.for_each_chunk(&wad.name, resolver, |path_hash, path, size| {
-                if seen.insert(path_hash) {
-                    index.insert(path_hash, path, size, ordinal);
-                }
-            });
-            if let Err(e) = read {
-                tracing::warn!("Skipping unreadable game archive {}: {e}", wad.name);
+        let (hashes, rows): (Vec<u64>, Vec<&ChunkRow>) =
+            chunks.chunks().map(|(hash, row)| (hash.0, row)).unzip();
+        let mut unlisted = 0usize;
+        resolver.for_each_batch(&hashes, |at, path_hash, path| {
+            let row = rows[at];
+            match u16::try_from(row.first_holder().index()) {
+                Ok(wad) => builder.insert(path_hash, path, row.size(), wad),
+                Err(_) => unlisted += 1,
             }
+        });
+
+        if unlisted > 0 {
+            tracing::warn!(
+                "Skipped {unlisted} game chunks: the install has more than {} archives",
+                u16::MAX
+            );
         }
 
-        index.finalize(0);
-        /* Byte order rather than natural: these are 16 hex digits, and reading
-        the leading digit run of each as a number interleaves them by it. */
-        index.unknown.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(index)
+        let wads = chunks
+            .archives()
+            .iter()
+            .map(|archive| archive.name.clone())
+            .collect();
+        builder.finish(wads)
     }
 
     /// List one directory, or `None` when nothing in the index has that path.
@@ -263,21 +315,17 @@ impl GameIndex {
         if path == UNKNOWN_DIR {
             return Some(GameDirListing {
                 dirs: Vec::new(),
-                files: self
-                    .unknown
-                    .iter()
-                    .map(|file| file.unnamed_entry(self.wad_name(file)))
-                    .collect(),
+                files: self.unnamed_entries(),
             });
         }
 
         let index = self.resolve(path)?;
         let dir = &self.dirs[index];
 
-        let mut dirs: Vec<GameDirEntry> = dir
-            .children
+        let mut dirs: Vec<GameDirEntry> = self
+            .children_of(dir)
             .iter()
-            .map(|(name, &child)| self.fold(path, name, child))
+            .map(|child| self.fold(path, self.child_name(child), child.dir as usize))
             .collect();
         /* The map keyed them by byte order, and a folded row is named for the
         whole run rather than the key. */
@@ -295,10 +343,10 @@ impl GameIndex {
 
         Some(GameDirListing {
             dirs,
-            files: dir
-                .files
+            files: self
+                .files_of(dir)
                 .iter()
-                .map(|file| file.entry(path, self.wad_name(file)))
+                .map(|file| self.entry(file, path))
                 .collect(),
         })
     }
@@ -409,54 +457,6 @@ impl GameIndex {
         }
     }
 
-    /// Add one chunk under its resolved path, or to the unnamed group.
-    ///
-    /// `wad` is the ordinal of the archive the chunk was read from, which
-    /// indexes [`Self::wads`].
-    fn insert(&mut self, path_hash: u64, path: Option<&str>, size_bytes: u64, wad: u32) {
-        let Some(path) = path else {
-            let name = hex_name(WadHash(path_hash));
-            self.unknown.push(File {
-                mask: letter_mask(&name),
-                name,
-                path_hash,
-                size_bytes,
-                wad,
-            });
-            return;
-        };
-
-        let mut segments = path.split('/').filter(|s| !s.is_empty()).peekable();
-        let mut cursor = 0usize;
-        let mut name = None;
-
-        while let Some(segment) = segments.next() {
-            if segments.peek().is_none() {
-                name = Some(segment);
-                break;
-            }
-            cursor = match self.dirs[cursor].children.get(segment) {
-                Some(&child) => child,
-                None => {
-                    let child = self.dirs.len();
-                    self.dirs.push(Dir::default());
-                    self.dirs[cursor].children.insert(segment.to_owned(), child);
-                    child
-                }
-            };
-        }
-
-        // A path of nothing but separators names no file.
-        let Some(name) = name else { return };
-        self.dirs[cursor].files.push(File {
-            name: name.to_owned(),
-            path_hash,
-            size_bytes,
-            wad,
-            mask: letter_mask(name),
-        });
-    }
-
     /// The archive a file was read from.
     ///
     /// # Panics
@@ -467,34 +467,60 @@ impl GameIndex {
         &self.wads[file.wad as usize]
     }
 
-    /// Sort each directory's files and fill in what the whole subtree holds.
-    ///
-    /// Returns the recursive file count and the union of every letter below
-    /// this directory, which is what lets a search skip a subtree whole.
-    fn finalize(&mut self, index: usize) -> (u32, u32) {
-        let children: Vec<(String, usize)> = self.dirs[index]
-            .children
-            .iter()
-            .map(|(name, &child)| (name.clone(), child))
-            .collect();
+    /// The name of `file`: the last segment of its path, or its hash for an unnamed chunk.
+    fn name_of(&self, file: &File) -> &str {
+        let at = file.name_at as usize;
+        &self.names[at..at + file.name_len as usize]
+    }
 
-        let mut total = self.dirs[index].files.len() as u32;
-        let mut mask = self.dirs[index]
-            .files
-            .iter()
-            .fold(0, |mask, file| mask | file.mask);
+    fn child_name(&self, child: &Child) -> &str {
+        let at = child.name_at as usize;
+        &self.names[at..at + child.name_len as usize]
+    }
 
-        for (name, child) in children {
-            let (count, subtree) = self.finalize(child);
-            total += count;
-            mask |= letter_mask(&name) | subtree;
+    fn files_of(&self, dir: &Dir) -> &[File] {
+        let start = dir.files.start as usize;
+        &self.files[start..start + dir.files.len as usize]
+    }
+
+    fn children_of(&self, dir: &Dir) -> &[Child] {
+        let start = dir.children.start as usize;
+        &self.children[start..start + dir.children.len as usize]
+    }
+
+    /// Returns the subdirectory `name` of the directory at `dir`, or `None` if it has none.
+    fn child(&self, dir: usize, name: &str) -> Option<usize> {
+        let children = self.children_of(&self.dirs[dir]);
+        let at = children
+            .binary_search_by(|child| self.child_name(child).cmp(name))
+            .ok()?;
+        Some(children[at].dir as usize)
+    }
+
+    /// The wire shape of `file`, with the path that its directory `dir` gives it.
+    fn entry(&self, file: &File, dir: &str) -> GameFileEntry {
+        let name = self.name_of(file);
+        let path = if dir.is_empty() {
+            name.to_owned()
+        } else {
+            format!("{dir}/{name}")
+        };
+        GameFileEntry {
+            path_hash: hex_name(WadHash(file.path_hash)),
+            path: Some(path),
+            size_bytes: u64::from(file.size_bytes),
+            wad: self.wad_name(file).to_owned(),
         }
+    }
 
-        let dir = &mut self.dirs[index];
-        dir.files.sort_by(|a, b| compare_names(&a.name, &b.name));
-        dir.file_count = total;
-        dir.subtree_mask = mask;
-        (total, mask)
+    /// The wire shape of a chunk no hash table names, which has no path.
+    fn unnamed_entry(&self, file: &File) -> GameFileEntry {
+        GameFileEntry {
+            path_hash: hex_name(WadHash(file.path_hash)),
+            path: None,
+            size_bytes: u64::from(file.size_bytes),
+            wad: self.wad_name(file).to_owned(),
+        }
     }
 
     /// Every file at or below one directory, in tree order.
@@ -528,11 +554,11 @@ impl GameIndex {
     pub fn file_at(&self, path: &str) -> Option<GameFileEntry> {
         let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
         let index = self.resolve(dir)?;
-        let file = self.dirs[index]
-            .files
+        let file = self
+            .files_of(&self.dirs[index])
             .iter()
-            .find(|file| file.name == name)?;
-        Some(file.entry(dir, self.wad_name(file)))
+            .find(|file| self.name_of(file) == name)?;
+        Some(self.entry(file, dir))
     }
 
     /// The chunk no hash table names at `path_hash`, or `None` where the index holds
@@ -542,36 +568,35 @@ impl GameIndex {
     /// is where a path the tree lacks is looked for next.
     #[must_use]
     pub fn unnamed_at(&self, path_hash: u64) -> Option<GameFileEntry> {
-        let name = hex_name(WadHash(path_hash));
         let at = self
             .unknown
-            .binary_search_by(|file| file.name.as_str().cmp(&name))
+            .binary_search_by_key(&path_hash, |file| file.path_hash)
             .ok()?;
-        let file = &self.unknown[at];
-        Some(file.unnamed_entry(self.wad_name(file)))
+        Some(self.unnamed_entry(&self.unknown[at]))
     }
 
     /// The wire shape of every chunk no hash table names.
     fn unnamed_entries(&self) -> Vec<GameFileEntry> {
         self.unknown
             .iter()
-            .map(|file| file.unnamed_entry(self.wad_name(file)))
+            .map(|file| self.unnamed_entry(file))
             .collect()
     }
 
     /// Append this directory's files and every descendant's, depth first.
     fn collect_files(&self, index: usize, path: &str, out: &mut Vec<GameFileEntry>) {
         let dir = &self.dirs[index];
-        for file in &dir.files {
-            out.push(file.entry(path, self.wad_name(file)));
+        for file in self.files_of(dir) {
+            out.push(self.entry(file, path));
         }
-        for (name, &child) in &dir.children {
+        for child in self.children_of(dir) {
+            let name = self.child_name(child);
             let child_path = if path.is_empty() {
-                name.clone()
+                name.to_owned()
             } else {
                 format!("{path}/{name}")
             };
-            self.collect_files(child, &child_path, out);
+            self.collect_files(child.dir as usize, &child_path, out);
         }
     }
     /// Visit every named file as `(path hash, path, archive ordinal)`, in tree order.
@@ -591,7 +616,7 @@ impl GameIndex {
     /// indexes [`wads`](Self::wads).
     pub fn for_each_unnamed_file(&self, mut visit: impl FnMut(u64, u32)) {
         for file in &self.unknown {
-            visit(file.path_hash, file.wad);
+            visit(file.path_hash, u32::from(file.wad));
         }
     }
 
@@ -606,22 +631,22 @@ impl GameIndex {
     /// a file's full path is built without allocating one per file.
     fn visit_files(&self, dir: usize, path: &mut String, visit: &mut impl FnMut(u64, &str, u32)) {
         let node = &self.dirs[dir];
-        for file in &node.files {
+        for file in self.files_of(node) {
             let restore = path.len();
             if !path.is_empty() {
                 path.push('/');
             }
-            path.push_str(&file.name);
-            visit(file.path_hash, path, file.wad);
+            path.push_str(self.name_of(file));
+            visit(file.path_hash, path, u32::from(file.wad));
             path.truncate(restore);
         }
-        for (name, &child) in &node.children {
+        for child in self.children_of(node) {
             let restore = path.len();
             if !path.is_empty() {
                 path.push('/');
             }
-            path.push_str(name);
-            self.visit_files(child, path, visit);
+            path.push_str(self.child_name(child));
+            self.visit_files(child.dir as usize, path, visit);
             path.truncate(restore);
         }
     }
@@ -630,7 +655,7 @@ impl GameIndex {
     fn resolve(&self, path: &str) -> Option<usize> {
         let mut cursor = 0usize;
         for segment in path.split('/').filter(|s| !s.is_empty()) {
-            cursor = *self.dirs[cursor].children.get(segment)?;
+            cursor = self.child(cursor, segment)?;
         }
         Some(cursor)
     }
@@ -651,17 +676,18 @@ impl GameIndex {
 
         loop {
             let dir = &self.dirs[cursor];
-            if !dir.files.is_empty() || dir.children.len() != 1 {
+            if dir.files.len != 0 {
                 break;
             }
-            let Some((next_name, &next)) = dir.children.iter().next() else {
+            let [next] = self.children_of(dir) else {
                 break;
             };
+            let next_name = self.child_name(next);
             path.push('/');
             path.push_str(next_name);
             display.push('/');
             display.push_str(next_name);
-            cursor = next;
+            cursor = next.dir as usize;
         }
 
         GameDirEntry {
@@ -712,7 +738,7 @@ impl Scan<'_> {
             return;
         }
 
-        for file in &node.files {
+        for file in index.files_of(node) {
             if self.tick(is_overtaken) {
                 return;
             }
@@ -722,14 +748,19 @@ impl Scan<'_> {
             self.consider(file);
         }
 
-        for (name, &child) in &node.children {
+        for child in index.children_of(node) {
+            let name = index.child_name(child);
             let restore = self.path.len();
             if !self.path.is_empty() {
                 self.path.push('/');
             }
             self.path.push_str(name);
 
-            self.walk(child, path_mask | letter_mask(name), is_overtaken);
+            self.walk(
+                child.dir as usize,
+                path_mask | letter_mask(name),
+                is_overtaken,
+            );
 
             self.path.truncate(restore);
             if self.overtaken {
@@ -774,9 +805,10 @@ impl Scan<'_> {
     /// the directory. A name match marks no part of the path, because it never
     /// read one.
     fn consider(&mut self, file: &File) {
-        let hit = match self.query.matches(&file.name) {
+        let name = self.index.name_of(file);
+        let hit = match self.query.matches(name) {
             Some(matched) => {
-                let band = u8::from(!self.query.starts(&file.name));
+                let band = u8::from(!self.query.starts(name));
                 self.hit(file, band, matched.score, matched.ranges, Vec::new())
             }
             /* A name holding only some of the terms still gets its path read,
@@ -786,7 +818,7 @@ impl Scan<'_> {
                 self.full.clear();
                 self.full.push_str(&self.path);
                 self.full.push('/');
-                self.full.push_str(&file.name);
+                self.full.push_str(name);
 
                 let Some(matched) = self.query.matches(&self.full) else {
                     return;
@@ -809,14 +841,15 @@ impl Scan<'_> {
         name_ranges: Vec<Range>,
         path_ranges: Vec<Range>,
     ) -> Hit {
+        let name = self.index.name_of(file);
         Hit {
-            tier: self.preferred.tier(file),
+            tier: self.preferred.tier(file, name),
             band,
             score,
-            length: (self.path.len() + file.name.len()) as u32,
+            length: (self.path.len() + name.len()) as u32,
             row: GameSearchHit {
                 path_hash: hex_name(WadHash(file.path_hash)),
-                name: file.name.clone(),
+                name: name.to_owned(),
                 path: self.path.clone(),
                 wad: self.index.wad_name(file).to_owned(),
                 band,
@@ -871,21 +904,21 @@ impl FindScan<'_> {
         let index = self.index;
         let node = &index.dirs[dir];
 
-        for file in &node.files {
+        for file in index.files_of(node) {
             if self.tick(is_overtaken) {
                 return;
             }
             self.consider(file, true);
         }
 
-        for (name, &child) in &node.children {
+        for child in index.children_of(node) {
             let restore = self.path.len();
             if !self.path.is_empty() {
                 self.path.push('/');
             }
-            self.path.push_str(name);
+            self.path.push_str(index.child_name(child));
 
-            self.walk(child, is_overtaken);
+            self.walk(child.dir as usize, is_overtaken);
 
             self.path.truncate(restore);
             if self.overtaken {
@@ -912,11 +945,12 @@ impl FindScan<'_> {
     /// `named` says a hash table resolved the file, so an unnamed chunk's hash
     /// never masquerades as a path.
     fn consider(&mut self, file: &File, named: bool) {
+        let name = self.index.name_of(file);
         let restore = self.path.len();
         if !self.path.is_empty() {
             self.path.push('/');
         }
-        self.path.push_str(&file.name);
+        self.path.push_str(name);
 
         if let Some(ranges) = self.query.matches(&self.path) {
             self.total += 1;
@@ -931,9 +965,9 @@ impl FindScan<'_> {
                 self.hits.push(GameFindHit {
                     path_hash: hex_name(WadHash(file.path_hash)),
                     path: named.then(|| self.path.clone()),
-                    name: file.name.clone(),
+                    name: name.to_owned(),
                     wad: self.index.wad_name(file).to_owned(),
-                    size_bytes: file.size_bytes,
+                    size_bytes: u64::from(file.size_bytes),
                     name_ranges,
                     path_ranges,
                 });
@@ -984,9 +1018,9 @@ impl<'a> Preferred<'a> {
     ///
     /// A wrong kind adds 2 and a wrong archive adds 1, so a texture from another archive
     /// still ranks above a mesh from the field's archive.
-    fn tier(&self, file: &File) -> u8 {
+    fn tier(&self, file: &File, name: &str) -> u8 {
         let kind = self.extensions.is_empty()
-            || file.name.rsplit_once('.').is_some_and(|(_, extension)| {
+            || name.rsplit_once('.').is_some_and(|(_, extension)| {
                 self.extensions
                     .iter()
                     .any(|expected| expected.eq_ignore_ascii_case(extension))
@@ -1067,9 +1101,20 @@ fn split_ranges(ranges: &[Range], boundary: u32) -> (Vec<Range>, Vec<Range>) {
 pub struct GameIndexState {
     game: LazySlot<GameIndex>,
     lcu: LazySlot<GameIndex>,
+    /// The file that caches the game's [`ChunkIndex`], or `None` for no cache.
+    chunk_cache: Option<PathBuf>,
 }
 
 impl GameIndexState {
+    /// Returns a state that caches the game's chunk index in the file `chunk_cache`.
+    #[must_use]
+    pub fn cached_at(chunk_cache: PathBuf) -> Self {
+        Self {
+            chunk_cache: Some(chunk_cache),
+            ..Self::default()
+        }
+    }
+
     /// Return the index over `archives`, building it on first use.
     ///
     /// `resolver` is read only when a build happens. The lock is held across
@@ -1085,10 +1130,19 @@ impl GameIndexState {
         resolver: &LayeredHashDb,
     ) -> AppResult<Arc<GameIndex>> {
         self.slot(archives.source())
-            .get_or_try_init(|| GameIndex::build(archives, resolver))
+            .get_or_try_init(|| Ok(GameIndex::over(&self.chunk_index(archives)?, resolver)))
     }
 
-    /// Drop the built index of one source, so its next read walks the install again.
+    /// Returns the chunk index of `archives`, from the cache file of the state if it matches.
+    ///
+    /// # Errors
+    ///
+    /// Fails if [`GameArchives::chunk_index`] fails.
+    pub fn chunk_index(&self, archives: &GameArchives) -> AppResult<ChunkIndex> {
+        archives.chunk_index(self.chunk_cache.as_deref())
+    }
+
+    /// Drop the built index of one source, so its next read reads the install again.
     pub fn clear(&self, source: WadSource) {
         self.slot(source).clear();
     }
@@ -1107,30 +1161,133 @@ impl GameIndexState {
     }
 }
 
-impl File {
-    /// The wire shape, with the path this file's directory gives it.
-    fn entry(&self, dir: &str, wad: &str) -> GameFileEntry {
-        let path = if dir.is_empty() {
-            self.name.clone()
-        } else {
-            format!("{dir}/{}", self.name)
+impl Builder {
+    /// Adds one chunk under its resolved path, or to the unnamed group.
+    ///
+    /// `wad` is the ordinal of the archive the chunk was read from, which
+    /// indexes [`GameIndex::wads`].
+    fn insert(&mut self, path_hash: u64, path: Option<&str>, size_bytes: u64, wad: u16) {
+        // A table of contents records a chunk's size in 32 bits.
+        let size_bytes = u32::try_from(size_bytes).unwrap_or(u32::MAX);
+
+        let Some(path) = path else {
+            let name = hex_name(WadHash(path_hash));
+            if let Some(file) = self.file(&name, path_hash, size_bytes, wad) {
+                self.unknown.push(file);
+            }
+            return;
         };
-        GameFileEntry {
-            path_hash: hex_name(WadHash(self.path_hash)),
-            path: Some(path),
-            size_bytes: self.size_bytes,
-            wad: wad.to_owned(),
+
+        let mut segments = path.split('/').filter(|s| !s.is_empty()).peekable();
+        let mut cursor = 0usize;
+        let mut name = None;
+
+        while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                name = Some(segment);
+                break;
+            }
+            cursor = match self.dirs[cursor].children.get(segment) {
+                Some(&child) => child,
+                None => {
+                    let child = self.dirs.len();
+                    self.dirs.push(BuildDir::default());
+                    self.dirs[cursor].children.insert(segment.to_owned(), child);
+                    child
+                }
+            };
+        }
+
+        // A path of nothing but separators names no file.
+        let Some(name) = name else { return };
+        if let Some(file) = self.file(name, path_hash, size_bytes, wad) {
+            self.dirs[cursor].files.push(file);
+            self.file_count += 1;
         }
     }
 
-    /// The wire shape of a chunk no hash table names, which has no path.
-    fn unnamed_entry(&self, wad: &str) -> GameFileEntry {
-        GameFileEntry {
-            path_hash: hex_name(WadHash(self.path_hash)),
-            path: None,
-            size_bytes: self.size_bytes,
-            wad: wad.to_owned(),
+    /// Appends `name` to the name arena and returns a file that reads it.
+    ///
+    /// Returns `None` if the name is longer than a file records.
+    fn file(&mut self, name: &str, path_hash: u64, size_bytes: u32, wad: u16) -> Option<File> {
+        let name_len = u16::try_from(name.len()).ok()?;
+        let name_at = u32::try_from(self.names.len()).ok()?;
+        self.names.push_str(name);
+
+        Some(File {
+            path_hash,
+            name_at,
+            size_bytes,
+            mask: letter_mask(name),
+            name_len,
+            wad,
+        })
+    }
+
+    /// Lays the tree out as a [`GameIndex`] over the archives `wads`.
+    fn finish(mut self, wads: Vec<String>) -> GameIndex {
+        let mut index = GameIndex {
+            dirs: (0..self.dirs.len()).map(|_| Dir::default()).collect(),
+            files: Vec::with_capacity(self.file_count),
+            children: Vec::with_capacity(self.dirs.len() - 1),
+            unknown: std::mem::take(&mut self.unknown),
+            names: std::mem::take(&mut self.names),
+            wads,
+        };
+
+        self.finalize(0, &mut index);
+
+        // Every unnamed chunk's name is 16 hex digits, so hash order is name order.
+        index.unknown.sort_unstable_by_key(|file| file.path_hash);
+        index.unknown.shrink_to_fit();
+        index.names.shrink_to_fit();
+        index
+    }
+
+    /// Moves the files and children of the directory at `at`, and of every directory below
+    /// it, into `index`.
+    ///
+    /// Returns the recursive file count and the union of every letter below
+    /// the directory, which is what lets a search skip a subtree whole.
+    fn finalize(&mut self, at: usize, index: &mut GameIndex) -> (u32, u32) {
+        let mut files = std::mem::take(&mut self.dirs[at].files);
+        files.sort_by(|a, b| compare_names(index.name_of(a), index.name_of(b)));
+
+        let mut total = files.len() as u32;
+        let mut mask = files.iter().fold(0, |mask, file| mask | file.mask);
+        let file_span = Span {
+            start: index.files.len() as u32,
+            len: files.len() as u32,
+        };
+        index.files.extend(files);
+
+        let children = std::mem::take(&mut self.dirs[at].children);
+        let child_span = Span {
+            start: index.children.len() as u32,
+            len: children.len() as u32,
+        };
+        for (name, &dir) in &children {
+            index.children.push(Child {
+                name_at: index.names.len() as u32,
+                name_len: name.len() as u32,
+                dir: dir as u32,
+            });
+            index.names.push_str(name);
         }
+
+        for (name, dir) in children {
+            let (count, subtree) = self.finalize(dir, index);
+            total += count;
+            mask |= letter_mask(&name) | subtree;
+        }
+
+        index.dirs[at] = Dir {
+            children: child_span,
+            files: file_span,
+            file_count: total,
+            subtree_mask: mask,
+        };
+        (total, mask)
     }
 }
 

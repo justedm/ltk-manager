@@ -2,18 +2,18 @@
 
 ## Changes
 
-| Date       | Change                                                                |
-| ---------- | --------------------------------------------------------------------- |
-| 2026-10-09 | Give a tab's title its width before the context takes any             |
-| 2026-10-09 | Join the open tab to the row under it, on a filled tab rail           |
-| 2026-10-06 | Draw the project header in the title bar and the status row           |
-| 2026-10-02 | Report each working file, only for a project with no ignore rules     |
-| 2026-09-27 | Redraw every preview of a layer file saved from another program       |
-| 2026-09-25 | Make modules, and drag modules, entries and keys to organize them     |
-| 2026-09-25 | Read a manifest as one line per key, and act on its modules in place  |
-| 2026-09-24 | Read a layer's game data manifest as an outline                       |
-| 2026-09-20 | Reveal a file tab in the browser its file came from                   |
-| 2026-09-18 | A click previews, a double click keeps it, and a preview opens beside |
+| Date       | Change                                                               |
+| ---------- | -------------------------------------------------------------------- |
+| 2026-10-12 | Collapse a panel to its strip or to a rail of its tabs' icons        |
+| 2026-10-09 | Give a tab's title its width before the context takes any            |
+| 2026-10-09 | Join the open tab to the row under it, on a filled tab rail          |
+| 2026-10-06 | Draw the project header in the title bar and the status row          |
+| 2026-10-02 | Report each working file, only for a project with no ignore rules    |
+| 2026-09-27 | Redraw every preview of a layer file saved from another program      |
+| 2026-09-25 | Make modules, and drag modules, entries and keys to organize them    |
+| 2026-09-25 | Read a manifest as one line per key, and act on its modules in place |
+| 2026-09-24 | Read a layer's game data manifest as an outline                      |
+| 2026-09-20 | Reveal a file tab in the browser its file came from                  |
 
 Each edit of this document adds a row at the top. The table keeps the last ten rows.
 
@@ -106,6 +106,7 @@ This table holds every major feature of the editor. A status word has one meanin
 | Source control section | Planned     | Git history for the declarative data                                     |
 | Panel split layout     | Available   | A split tree, on `react-resizable-panels` seams                          |
 | Panel maximize         | Available   | A kept tab's double click fills the grid, and Esc restores it            |
+| Panel collapse         | Available   | A seam dragged past a panel's minimum collapses it, the side panel too   |
 | Per-project layout     | In progress | `.ltk/editor.json` is in, versioned. An in-app pass remains              |
 | Project bar            | Available   | Takes the header's middle, from the project name title                   |
 | Command palette        | Available   | The project, the game and the bin objects of both halves                 |
@@ -694,10 +695,12 @@ The `binentries` table of the [mimir cache](#hash-names) holds 421,835 object pa
 on disk, and the manager already opens that cache for the WAD path tables. A bin object path
 hashes to 32 bits, so the table answers hash to name and `hash_path` answers name to hash.
 
-The scan answers the other direction. It reads what each `.bin` declares and keeps
-`(object hash, class hash, file)`, and nothing else. The file is the declaring chunk's WAD
-path hash, which survives a rebuild of the game index and resolves to a name and an archive
-through it. 383,357 declarations at 16 bytes is 6.1MB.
+The scan answers the other direction. It is the object index of `ltk_game_index`, which
+reads what each `.bin` declares and keeps `(object hash, class hash, file, archive, kind)`,
+and nothing else. The file is the declaring chunk's WAD path hash, which survives a rebuild
+of the game index and resolves to a name through the hash tables. The archive is the copy
+the build read, and the kind tells a `PROP` from a `PTCH`. 383,357 declarations at 24 bytes
+is 9.2MB.
 
 The palette therefore matches a query against the table's strings and turns each survivor into
 a file through the index. The install declares 359,095 distinct objects and the table names
@@ -860,10 +863,15 @@ reconcile.
 | Resolving every hash to its name, at load | 399ms                                              |
 
 The build is decompression and nothing else. Every millisecond above belongs to zstd, so the
-work spreads across archives: one job per archive in ordinal order, each mounting its archive
+work spreads across archives: one job per archive in archive order, each mounting its archive
 itself rather than through the browser's cache, on the bounded pool of workers the problems
-pass uses, and the rows concatenated in archive order at the end. The game index build reads
-its archives one at a time today, and stays that way.
+pass uses, and the rows concatenated in archive order at the end. Within one archive the
+named `.bin` chunks come in chunk hash order, then the chunks with a bare name, then the
+unnamed. The build reads the chunk index of the game and not the tree, so the Objects switch
+warms without the browser's index.
+
+The manager lists the declaring files of one archive by path, the unnamed last, and the
+References document groups by file in that order.
 
 Three files of 42,306 fail to scan. A file that will not scan is skipped and logged, and it
 never fails the build, because a build that stops on one bad chunk in an install of a million
@@ -881,22 +889,34 @@ is not sniffed.
 
 ### Where it is kept
 
-In memory, for the session, and rebuilt from the archives the next time the application
-starts. Nothing is written to disk, and nothing will be on the figures above: the build costs
-under half a second on a warm file cache, runs off the thread that draws the window, and sits
-behind a switch that is off by default, so a cache would save less than keeping it correct
-across a game patch and a table sync would cost. The decision and the line it was taken on are
-in [the research note](../research/bin-object-index.md), section 10.
+The Objects switch builds a `GameSearch` of `ltk_game_index`: the term index of the install
+and the name sheets of the hash tables. Both are written to `game-index` under the app cache
+directory, `terms.bin` and `names.bin`, beside the chunk index's `chunks.bin`.
 
-Were one ever asked for, the object table is a section of the memory-mapped cache that
-[One cache, not two](#one-cache-not-two) describes, under the same archive checksums. A game
-patch rebuilds the archives it changed and no others, and a format version in the header
-forces a full rebuild when this manager writes the section differently.
+- The term index loads from its cache when the fingerprint of the install matches, and is
+  built from the archives and written otherwise
+- The name sheets load for every table whose mimir checksum matches the one the sheet was
+  cut under, and the tables that changed are cut again
+- A hashtable sync builds the index again: the term index loads from its cache and the
+  sheets of the synced tables are cut again
+- Switching Objects off drops the index, and so does a rebuild of the game index
 
-**The cache holds hashes and no names.** The mimir tables update on their own schedule, so a
-name written into the cache today is a name that can be wrong tomorrow. Resolving all 359,095
-hashes at load costs 200ms against a table that is already mapped, which is less than the
-cost of keeping a second copy correct.
+The index reads no query of the crate. The palette and the full search scan the `Entries`
+sheet with the shared matcher, and the browser lists the crate's object tree with single-child
+prefixes folded.
+
+Read on 2026-10-24 from WSL over the live install on its Windows drive, on 16 workers, with the
+CommunityDragon hash lists in place of the mimir tables.
+
+| Measurement                            | Value               |
+| -------------------------------------- | ------------------- |
+| The warm, with nothing cached          | 9.4s                |
+| The warm, from the caches              | 0.51s               |
+| Objects the `Entries` sheet names      | 383,916             |
+| The palette, `aatrox`                  | 14ms, 2,062 rows    |
+| The palette, `a`                       | 117ms, 398,545 rows |
+| The full search, `aatrox`              | 39ms, 2,048 objects |
+| The browser, the root and `Characters` | 0.15ms and 12ms     |
 
 ### The dependency graph
 
@@ -1207,7 +1227,8 @@ at a time. This is the shape Visual Studio Code uses, and most users know it alr
 | Source control | Version control for the declarative data. Under construction |
 
 The showing view's icon carries an accent mark on the window's own edge. Pressing that icon
-hides the panel, and pressing any icon while the panel is hidden reopens it on that view.
+hides the panel, and pressing any icon while the panel is hidden reopens it on that view. A drag
+of the panel's seam past its minimum width hides it too.
 The rail itself never hides, so the routes into a project are on screen whatever the editor
 grid holds. ADR-0038 is why the rail sits outside the panel it drives.
 
@@ -2854,6 +2875,13 @@ replaces that group's tab and leaves every other group standing, so a split hold
 replaceable tabs as it holds groups. A reader comparing a texture in one group against a tree
 in another keeps the texture.
 
+**An open made inside a document keeps that document.** A link chip, a row's open action or a
+browser row clicked in the replaceable tab makes that tab permanent, and the target takes a
+fresh replaceable tab beside it. Replacing the tab would drop its stop from
+[the navigation history](#the-navigation-history), and a back could not return to the document
+the link was followed in. This is what Visual Studio Code does for a code navigation out of a
+preview editor. An open from the sidebar or the palette replaces the tab as before.
+
 A gesture that places a tab keeps it. A drag into another group and a split with the tab both
 say the document is worth keeping, so both make it permanent. A reorder inside one strip
 leaves the role alone, because the tab did not go anywhere. A group that gives up its
@@ -3574,19 +3602,27 @@ pass removes the second download.
 
 The index holds the chunk table of every archive under `DATA/FINAL`, recursed. The game
 holds no archive outside that directory. The browser reads the index and never mounts an
-archive to draw a row. The overlay builder reads the same index, because the game gets one
-index and not two.
+archive to draw a row.
 
-The manager builds it in memory at the first read of a session. A live install measures
-456 archives and 939,329 chunks, and the build takes 1.3 seconds. A directory read from
-the built index takes 30 microseconds.
+The index has two layers:
+
+- The chunk index is `ltk_game_index::GameIndex`. It holds every chunk hash with its size
+  and every archive that contains it, and no path. The manager writes it to
+  `game-index/chunks.bin` under the app cache directory
+- The tree resolves every chunk hash through the hash tables and folds the paths into
+  directories. The manager builds it in memory at the first read of a session, from the
+  chunk index
+
+A live install measures 456 archives and 939,329 chunks, and the build takes 1.3 seconds.
+A directory read from the built index takes 30 microseconds.
 
 - The build starts at the first read, and not at application start
-- Nothing writes it to disk yet, so it costs those seconds once per session. The
-  memory-mapped cache below is what makes it survive a restart
-- A build reports no progress yet, and the browser holds a spinner while it runs
+- A build reports no progress, and the browser holds a spinner while it runs
 - A rebuild is a control in the browser, because the index is a snapshot of an install
-  that a patch can change under it
+  that a patch can change under it. It drops the tree, and the next read checks the cache
+  against the install
+- The League client's archives under `Plugins` get an index of their own, which no file
+  caches
 
 #### One tree
 
@@ -3607,9 +3643,16 @@ user opens it.
 Only a change of the game invalidates the index. The overlay keeps its own state file for
 the mod set and the mod content, and the index holds neither.
 
-A WAD header carries an xxh3 checksum of the data of the archive. The checksum sits in a
-fixed prefix of the file, so a validation pass reads a few hundred bytes for each archive
-and never touches a chunk table.
+The cache carries the fingerprint of the install: an XXH3 hash over the name, the size and
+the modification time of every archive under `DATA/FINAL`. A read compares it against the
+install, and a mismatch rebuilds the chunk index from every archive and rewrites the cache.
+A new set of hash tables keeps the cache and rebuilds the tree, because the chunk index
+holds no path.
+
+The one cache below replaces the fingerprint with a checksum for each archive. A WAD
+header carries an xxh3 checksum of the data of the archive. The checksum sits in a fixed
+prefix of the file, so a validation pass reads a few hundred bytes for each archive and
+never touches a chunk table.
 
 1. Read the header of every archive under `DATA/FINAL`.
 2. Compare each header checksum against the checksum in the cache.
@@ -3632,9 +3675,10 @@ the index treats a missing checksum as a rebuild.
 
 #### One cache, not two
 
-`ltk_overlay::GameIndex` reads the same chunk tables today and writes its own
-`game_index.bin`. Two caches over one set of bytes is one too many, so the memory-mapped
-cache replaces it. The overlay builder and the game browser then read one file.
+`ltk_overlay` builds the same `ltk_game_index::GameIndex` for each profile and writes it
+to its own `game_index.bin`. Two caches over one set of bytes is one too many, so the
+memory-mapped cache replaces it. The overlay builder and the game browser then read one
+file.
 
 | Axis         | `game_index.bin` today         | The one cache                  |
 | ------------ | ------------------------------ | ------------------------------ |
@@ -3854,21 +3898,23 @@ the header with a re-run control. Hits group by declaring file. A row of the ind
 object. A row of the walk is one place inside an object, its property path beside the object's
 name, and it opens the object tab expanded down to that row.
 
-| Query                             | Asked from                                  | Answered from       |
-| --------------------------------- | ------------------------------------------- | ------------------- |
-| Every object of a class           | An object row, an object tab's kebab        | The index           |
-| Every use of an embedded class    | An `embed` or `pointer` row                 | A walk of every bin |
-| Every object linking to an object | Find references on every menu an object has | The same walk       |
-| Every object naming a file        | A file row of the game tree or Content tree | The same walk       |
+| Query                             | Asked from                                  | Answered from      |
+| --------------------------------- | ------------------------------------------- | ------------------ |
+| Every object of a class           | An object row, an object tab's kebab        | The index          |
+| Every use of an embedded class    | An `embed` or `pointer` row                 | A walk of the bins |
+| Every object linking to an object | Find references on every menu an object has | The same walk      |
+| Every object naming a file        | A file row of the game tree or Content tree | The same walk      |
 
 The walk reads the project's layers first, then the install's declaring files in archive
-order, one job per archive on the bounded pool the problems pass uses. For an object, a `link`
-and a `hash` value match, map keys included. For a file, a `hash` of its path, a `file` of its
-chunk hash and a `string` of its path in any case match, and a chunk no table names is matched
-by a `file` value alone. It runs on demand. A band under the header draws the bins read
-and the references found, with a Cancel that stops the walk before its next bin, and a
-cancelled walk keeps what it found and marks the header partial. The declaring files of an
-object are no query of their own, because the object tab's Sandbox options list them.
+order, one job per archive on the bounded pool the problems pass uses. Of the install, it
+reads only the declaring files whose postings in the term index hold the target. For an
+object, a `link` and a `hash` value match, map keys included. For a file, a `hash` of its
+path, a `file` of its chunk hash and a `string` of its path in any case match, and a chunk no
+table names is matched by a `file` value alone. It runs on demand. A band under the header
+draws the bins read and the references found, with a Cancel that stops the walk before its
+next bin, and a cancelled walk keeps what it found and marks the header partial. The declaring
+files of an object are no query of their own, because the object tab's Sandbox options list
+them.
 
 #### The walk, measured
 
@@ -3882,11 +3928,34 @@ install, on 8 workers, straight after the index build and so on a warm file cach
 | Uses of `VfxEmitterDefinitionData`     | 1,513ms, 1,820,309 references, 20,000 kept |
 | The walk, on a cold file cache         | Not measured                               |
 
-**The walk stays a walk.** A second index behind the Objects switch saves a second and a half
-per query, and it holds every link and every embedded class of the install, rebuilt on a game
-patch and on every layer save. A query is a menu item asked once, with its progress and its
-cancel on screen, so the second index is not built. The decision is open again if a cold file
-cache puts the walk past ten seconds.
+#### The term index
+
+The walk reads its files from the postings of `ltk_game_index::TermIndex`, which holds every
+term of every declaration of the install: its object, its classes, its fields, its `hash`,
+`link`, `file` and `string` values. The postings of a target name the declaring files that
+hold it.
+
+| Target                 | Postings read                                                     |
+| ---------------------- | ----------------------------------------------------------------- |
+| An embedded class      | `Embedded` of the class hash                                      |
+| An object              | `Link` and `Hash` of the object's path hash                       |
+| A named file           | `Wad` of the chunk hash, `Hash` of the path, `String` of the path |
+| A chunk no table names | `Wad` of the chunk hash                                           |
+
+The walk reads the term index of the object index, which the Objects switch builds ("Where it
+is kept" above). The project's layers are read whole on every walk, because the index holds
+the install alone.
+
+Read on 2026-10-24 from WSL over the live install on its Windows drive, on 16 workers, with
+the CommunityDragon game hash list in place of the mimir tables.
+
+| Measurement                            | Every declaring file | From the postings           |
+| -------------------------------------- | -------------------- | --------------------------- |
+| Incoming links of one character record | 6,087ms, 25 files    | 32ms, the same 25 files     |
+| Uses of `VfxEmitterDefinitionData`     | 6,514ms, 189 files   | 3,705ms, the same 189 files |
+| Objects naming one texture             | 5,684ms, 3 files     | 69ms, the same 3 files      |
+| The term index build, on 8 workers     | 12.5s                |                             |
+| The term index, loaded from its cache  | 0.35s, 288MB on disk |                             |
 
 Find all references sits on the menu of every row that carries a
 [class card](BIN_EDITOR.md#the-class-card), and on every menu an object has.
@@ -3977,6 +4046,7 @@ tokens.
 | ------------------ | ------------------------------------------------------ |
 | A split node       | `Group`, and `orientation` comes from `dir`            |
 | A child of a split | `Panel`, with an `id` and a `minSize`                  |
+| A collapsed child  | The same `Panel`, `collapsible` to a `collapsedSize`   |
 | A seam             | `Separator`, which carries `role="separator"` and keys |
 | `layout`           | `defaultLayout` in, and `onLayoutChanged` out          |
 
@@ -4115,6 +4185,40 @@ nothing inside the panel takes the key. A double click on a replaceable tab keep
 Maximizing writes nothing to the tree, and a restart opens the arranged grid. A maximized panel
 takes no drop on its edges. The shells of the bin editor maximize a pane by the same gesture, per
 [How the panes are arranged](BIN_EDITOR.md#how-the-panes-are-arranged).
+
+### Collapsing a panel
+
+A seam dragged past a panel's minimum size collapses that panel, and the panels beside it get the
+freed room. What a collapsed panel keeps depends on the split it is in.
+
+| The panel is in | What a collapsed panel keeps                               |
+| --------------- | ---------------------------------------------------------- |
+| A column        | Its tab strip, at the strip's own height                   |
+| A row           | A rail as wide as the strip is tall, with an icon to a tab |
+
+A rail draws no title. Each icon names its tab in a tooltip, and the open tab's icon is the bright
+one.
+
+A split inside a split collapses the same way. A row of panels collapsed in a column keeps the
+strip of each of its panels, and a column of panels collapsed in a row keeps a rail for each.
+
+| Gesture                                            | What a collapsed panel does                   |
+| -------------------------------------------------- | --------------------------------------------- |
+| A drag of its seam back                            | Expands to the size the drag gives it         |
+| `Enter` on the seam after it                       | Expands, and a second `Enter` collapses it    |
+| A click in the strip or the rail it kept           | Expands to an even share of the split         |
+| A click on an icon of its rail                     | Expands with that tab open                    |
+| A tab opened, activated or dropped without a click | Stays collapsed, and its strip or rail has it |
+
+`Enter` toggles the panel before the seam. The last panel of a split has no seam after it, so it
+expands by the drag or the click.
+
+The collapse is a share like any other, so `layout` holds it and a project opens with the panel
+collapsed the way it was left. The strip's height and the rail's width follow the zoom setting.
+The shells of the bin editor collapse a pane by the same gesture.
+
+The primary side panel collapses too. A seam dragged past its minimum width hides it, which is
+the hide the rail runs, per [The rail](#the-rail). The panel reopens at the width it had before.
 
 ### Two libraries that do not fit
 

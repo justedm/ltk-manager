@@ -14,6 +14,7 @@ use ltk_manager_base::error::{message_with_sources, DomainError, ErrorKind};
 pub use ltk_manager_base::error::{AppError, AppResult, OverlayErrorCategory, Utf8PathExt};
 use ltk_manager_bin::bin_document::{BinDocumentError, EditRejection, ReadOnly};
 use ltk_manager_core::github::{GitHubError, GitHubErrorKind};
+use ltk_manager_runeforge::RuneforgeError;
 use ltk_manager_runtime::launcher::LauncherError;
 use ltk_manager_runtime::patcher::PatcherError;
 use ltk_manager_workshop::WorkshopError;
@@ -33,6 +34,14 @@ pub enum AppErrorResponse {
     /// An external tool installation failed.
     Integration {
         error: ltk_manager_runtime::integrations::IntegrationError,
+    },
+    /// A settings backup could not be written or read. The variant says which.
+    SettingsBackup {
+        error: crate::settings_backup::SettingsBackupError,
+    },
+    /// A move of the data directory was refused or failed. The variant says which.
+    DataMove {
+        error: crate::data_location::DataMoveError,
     },
     /// File system I/O failed.
     Io { detail: String },
@@ -125,6 +134,8 @@ pub enum AppErrorResponse {
     },
     /// A download was asked for from a domain the trusted providers list omits.
     UntrustedDomain { domain: String },
+    /// A call to RuneForge failed. The variant says which and carries what the dialog renders.
+    Runeforge { error: RuneforgeError },
     /// Something GitHub publishes could not be read. The kind says which
     /// remedy applies, and the feed says what was being read.
     #[serde(rename = "GITHUB")]
@@ -357,6 +368,7 @@ impl From<DomainError> for AppErrorResponse {
         let error = downcast_or!(error, PatcherError, error => Self::Patcher { error });
         let error = downcast_or!(error, LauncherError, error => Self::Launcher { error });
         let error = downcast_or!(error, WorkshopError, error => Self::Workshop { error });
+        let error = downcast_or!(error, RuneforgeError, error => Self::Runeforge { error });
         let error = downcast_or!(error, BinDocumentError, error => Self::from(error));
 
         let detail = error.to_string();

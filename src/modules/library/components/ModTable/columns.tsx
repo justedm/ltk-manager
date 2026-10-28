@@ -1,13 +1,8 @@
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { type ComponentType, use } from "react";
 
-import {
-  type ArrangedColumn,
-  Checkbox,
-  PickContext,
-  ROW_HEIGHT,
-  THUMB_SIZE,
-} from "@/components";
+import { type ArrangedColumn, Checkbox, PickContext, ROW_HEIGHT, THUMB_SIZE } from "@/components";
 import { m } from "@/i18n";
 import { SuspectBadge } from "@/modules/diagnostics";
 import { useFolders } from "@/modules/library/api";
@@ -15,7 +10,6 @@ import { twMerge } from "@/utils";
 
 import type { RowDensity, SortField, TableColumnId, TableGroupBy } from "../../state";
 import { LayerPopover } from "../LayerPopover";
-import { MissingDepsBadge } from "../MissingDepsBadge";
 import { ModCardMenu, ModCardToggle, ModPills } from "../ModCard/ModCardParts";
 import type { ModCardView } from "../ModCard/useModCardController";
 import { ModHealthBadge } from "../ModHealthBadge";
@@ -163,7 +157,6 @@ function HealthCell({ view }: CellProps) {
     <span {...stop} className="flex items-center gap-1 empty:hidden">
       <ModHealthBadge modId={view.mod.id} />
       <SuspectBadge modId={view.mod.id} enabled={view.mod.enabled} />
-      <MissingDepsBadge modId={view.mod.id} enabled={view.mod.enabled} />
     </span>
   );
 }

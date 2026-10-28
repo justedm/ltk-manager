@@ -6,14 +6,8 @@ import { SuspectBadge } from "@/modules/diagnostics";
 import { twMerge } from "@/utils";
 
 import { LayerPopover } from "../LayerPopover";
-import { MissingDepsBadge } from "../MissingDepsBadge";
 import { ModHealthBadge } from "../ModHealthBadge";
-import {
-  ModCardContextMenu,
-  ModCardMenu,
-  ModCardThumbnail,
-  ModPills,
-} from "./ModCardParts";
+import { ModCardContextMenu, ModCardMenu, ModCardThumbnail, ModPills } from "./ModCardParts";
 import type { ModCardView } from "./useModCardController";
 
 export function ModCardGrid({ view }: { view: ModCardView }) {
@@ -167,9 +161,6 @@ export function ModCardGrid({ view }: { view: ModCardView }) {
         <div className="mt-auto flex items-center gap-1">
           <ModPills mod={mod} max={3} />
           {isMultiLayer && <LayerPopover mod={mod} />}
-          <span data-no-toggle onClick={(e) => e.stopPropagation()}>
-            <MissingDepsBadge modId={mod.id} enabled={mod.enabled} />
-          </span>
         </div>
       </div>
     </ModCardContextMenu>

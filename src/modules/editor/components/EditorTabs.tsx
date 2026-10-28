@@ -56,6 +56,9 @@ export interface EditorTab {
   menu?: ReactNode;
 }
 
+/** The rail's `h-9` in px at 100% zoom, which is the height a collapsed panel keeps. */
+export const EDITOR_TABS_HEIGHT = 40.5;
+
 export interface EditorTabsProps {
   /** The leaf this strip belongs to, which scopes its sortable ids across strips. */
   leafId: string;
@@ -153,7 +156,7 @@ export function EditorTabs({
       <Tabs.List
         ref={listRef}
         variant="plain"
-        className="min-w-0 flex-1 items-end gap-1.5 overflow-x-scroll overflow-y-hidden pr-2 scrollbar-sm"
+        className="min-w-0 flex-1 items-end overflow-x-scroll overflow-y-hidden pr-2 scrollbar-sm"
         {...NO_OVERSCROLL}
       >
         {tabs.length === 0 && <span aria-hidden="true" className="h-9" />}
@@ -523,8 +526,8 @@ const SortableTab = memo(function SortableTab({
 });
 
 /* The seam between the pinned run and the rest of the strip. Its own element
-   rather than a border on the tab, so the gap stays even on both sides of it
-   and a tab dragged past it never carries the rule along. */
+   rather than a border on the tab, so a tab dragged past it never carries the
+   rule along. */
 function PinnedDivider() {
   return <span aria-hidden="true" className="h-5 w-px shrink-0 self-center bg-surface-600" />;
 }

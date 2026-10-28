@@ -1,24 +1,25 @@
 //! The walk: one object's property subtree into a [`VfxValue`], with every link chased
 //! and every asset name located.
 
-use std::collections::HashMap;
-
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use ltk_hash::{BinHash, WadHash};
 use ltk_manager_base::hashing::named;
 use ltk_meta::property::values;
 use ltk_meta::walk::{Leaf, TreeValue as _};
 use ltk_meta::{BinObject, PropertyValueEnum};
 
+mod children;
+
+use children::search_linked_children;
+
 use super::{VfxField, VfxMapEntry, VfxObject, VfxSystem, VfxValue};
-use ltk_manager_assets::preview::AssetRef;
 use ltk_manager_bin::bin_document::{
     AssetLookup, BinDocument, BinDocumentError, Locator, Namer, RowNames, chunk_asset, hash_hex,
     hex, link, object_at, owned,
 };
 use ltk_manager_bin::bin_walk as walk;
 
-use crate::linked::find_linked_materials;
+use crate::lookup::{ObjectLookup, find_linked_materials};
 use crate::material::{MaterialPreview, linked_material};
 use crate::resolver::{EFFECT_KEY, resolver_entries};
 
@@ -82,6 +83,35 @@ const CHILD_IDENTIFIER: BinHash = named("VfxChildIdentifier");
 /// `ResourceResolver`, the scope a skin's effect keys resolve in.
 const RESOURCE_RESOLVER: BinHash = named("ResourceResolver");
 
+/// `VfxSystemDefinitionData`, the class a child identifier names.
+const SYSTEM_DEFINITION: BinHash = named("VfxSystemDefinitionData");
+
+impl ObjectLookup<'_> {
+    /// Resolves the system at `entry` from the first bin of the lookup that declares it, with
+    /// its children and custom materials read from the bins of the lookup.
+    ///
+    /// A child system or a material that no bin of the lookup declares is skipped: the child
+    /// stays a link and the material stays missing.
+    ///
+    /// # Errors
+    ///
+    /// As `resolve_system`, against the bin that declares `entry`. Fails with
+    /// [`BinDocumentError::NodeNotFound`] if no bin of the lookup declares it.
+    pub fn system(&mut self, entry: BinHash) -> Result<VfxSystem, BinDocumentError> {
+        let found = self.find(entry);
+        let document = found.map_or(self.open(), |found| self.document(found));
+        let mut system =
+            resolve_system(document, entry, self.names(), self.assets(), self.shaders())?;
+
+        if let Some(found) = found {
+            search_linked_children(&mut system, found, self);
+        }
+        let missing = system.materials.iter_mut().collect();
+        find_linked_materials(missing, self);
+        Ok(system)
+    }
+}
+
 /// One system's whole property subtree, with every reference resolved.
 ///
 /// A `Link` naming another object of the same document is inlined as that object's
@@ -96,7 +126,7 @@ const RESOURCE_RESOLVER: BinHash = named("ResourceResolver");
 /// Fails with [`BinDocumentError::NodeNotFound`] where `entry` is no object of the
 /// document, and with [`BinDocumentError::ReadTooLarge`] or
 /// [`BinDocumentError::ReadTooDeep`] where the subtree is larger than one read answers.
-pub fn resolve_system(
+pub(crate) fn resolve_system(
     document: &BinDocument,
     entry: BinHash,
     names: &dyn RowNames,
@@ -128,22 +158,30 @@ pub fn resolve_system(
     })
 }
 
-/// The custom materials of `system` its own bin does not declare, looked for in `linked`
-/// and in what each file links.
+/// Returns the systems that a child identifier of `document` can link.
 ///
-/// A system's custom material is as often declared in the skin or map bin its file links as
-/// in its own. Each one found is read there and carries that file as its `source`, and one no
-/// file within reach declares stays missing. `shaders` is the defs [`resolve_system`] took.
-pub fn search_linked_materials(
-    system: &mut VfxSystem,
-    linked: Vec<AssetRef>,
-    names: &dyn RowNames,
-    assets: &dyn AssetLookup,
-    shaders: Option<&BinDocument>,
-    read: &mut dyn FnMut(&AssetRef) -> Option<BinDocument>,
-) {
-    let missing = system.materials.iter_mut().collect();
-    find_linked_materials(missing, linked, names, assets, shaders, read);
+/// Lists every `VfxSystemDefinitionData` of the document in document order. After them, lists
+/// each object that a `ResourceResolver` of the document maps a key to and the document does
+/// not declare, once, in resolver order. Skips a key mapped to a null link.
+pub fn child_targets(document: &BinDocument, names: &dyn RowNames) -> Vec<VfxObject> {
+    let declared = document.entries().filter(|entry| {
+        document
+            .object_at(*entry)
+            .is_some_and(|object| object.class_hash == SYSTEM_DEFINITION)
+    });
+    let mapped = resources(document)
+        .into_values()
+        .filter(|target| target.0 != 0 && document.object_at(*target).is_none());
+    let targets: IndexSet<BinHash> = declared.chain(mapped).collect();
+
+    let mut namer = Namer::new(names);
+    targets
+        .into_iter()
+        .map(|entry| VfxObject {
+            entry: hex(entry),
+            name: namer.entry(entry),
+        })
+        .collect()
 }
 
 /// One read of one system: the tree it is over, what it resolves against, and what it
@@ -154,7 +192,7 @@ struct Walk<'a> {
     assets: &'a dyn AssetLookup,
     shaders: Option<&'a BinDocument>,
     /// Every effect key the document's resolvers map, to the object its link names.
-    resources: HashMap<BinHash, BinHash>,
+    resources: IndexMap<BinHash, BinHash>,
     /// The objects the walk is inside, which a link back into answers as a link.
     open: Vec<BinHash>,
     values: usize,
@@ -421,8 +459,8 @@ impl<'a> Walk<'a> {
 /// The first resolver holding a key wins, in the order the document holds them. The walk
 /// cannot know which resolver a system's skin links, so every resolver of the document
 /// counts.
-fn resources(document: &BinDocument) -> HashMap<BinHash, BinHash> {
-    let mut resources = HashMap::new();
+fn resources(document: &BinDocument) -> IndexMap<BinHash, BinHash> {
+    let mut resources = IndexMap::new();
     for entry in document.entries() {
         let Some(object) = document
             .object_at(entry)

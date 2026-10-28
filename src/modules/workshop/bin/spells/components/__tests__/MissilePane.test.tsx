@@ -32,6 +32,7 @@ const PREVIEW: SpellPreview = {
   castConeAngle: null,
   castConeDistance: null,
   animationName: null,
+  missileSpeed: null,
   missile: {
     movement: { kind: "fixedSpeed", speed: 5000 },
     startDelay: null,
@@ -39,12 +40,15 @@ const PREVIEW: SpellPreview = {
     targetBone: "r_hand",
     targetHeight: 100,
     initialTargetHeight: 100,
+    heightOffsetAtEnd: null,
+    height: null,
+    facing: null,
   },
   effectKey: "0x00000001",
   effectName: null,
   issues: [],
 };
-const EFFECT: EffectSystem = { key: "0x00000001", system: "0x12345678", source: null };
+const EFFECT: EffectSystem = { key: "0x00000001", system: "0x12345678", name: null };
 
 function mount(preview: SpellPreview = PREVIEW, effects: EffectSystem[] = [EFFECT]) {
   mockInvoke.mockImplementation(async (command, args) => {
@@ -95,16 +99,6 @@ it("resolves the flight key through the selected skin rather than treating it as
   expect(mockInvoke).toHaveBeenCalledWith(commandNames.preview.readSkin, {
     document: 1,
     entry: "0x98765432",
-  });
-});
-
-it("opens a foreign effect in its own document", async () => {
-  mount(PREVIEW, [{ ...EFFECT, source: { kind: "file", path: "particles.bin" } }]);
-  expect(await screen.findByText("Flight 9 0x12345678")).toBeInTheDocument();
-  expect(mockInvoke).toHaveBeenCalledWith(commandNames.bin.binOpen, {
-    sandbox: { kind: "game" },
-    asset: { kind: "file", path: "particles.bin" },
-    entry: "0x12345678",
   });
 });
 

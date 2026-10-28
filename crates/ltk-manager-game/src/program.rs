@@ -11,14 +11,19 @@ use hexshade::{
 use ltk_hash::{BinHash, WadHash};
 use ltk_manager_assets::preview::AssetRef;
 use ltk_manager_base::error::AppResult;
-use ltk_manager_bin::bin_document::{AssetLookup, BinDocument, RowNames};
+use ltk_manager_base::hashing::named;
+use ltk_manager_bin::bin_document::{AssetLookup, BinDocument, RowNames, object_at};
 use serde::{Deserialize, Serialize};
 
+use crate::lookup::{Declared, ObjectLookup};
 use crate::material::MaterialWarning;
 use crate::material::pass::{
     Define, DefineSource, MaterialKind, PassState, PassTexture, ResolvedMaterial, ResolvedPass,
-    SamplerState, TextureSource, resolve_embedded_passes, resolve_passes,
+    SamplerState, TextureSource, resolve_embedded_passes, resolve_passes, resolve_shader_pass,
 };
+
+/// The class hash of a shader def, which a program read resolves with its own defaults.
+const CUSTOM_SHADER_DEF: BinHash = named("CustomShaderDef");
 
 /// The defines a studio adds to every pass, off the engine's global list. The pass wins
 /// on a conflict.
@@ -294,8 +299,92 @@ pub struct Resolution<'a> {
     pub shaders: Option<&'a BinDocument>,
 }
 
+/// A material that a program read names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgramTarget {
+    /// The material declared as the object.
+    Object(BinHash),
+    /// The material embedded at the property path `path` under the object `entry`.
+    Embedded { entry: BinHash, path: String },
+}
+
+impl ProgramTarget {
+    /// The object the material is declared under.
+    fn entry(&self) -> BinHash {
+        match self {
+            Self::Object(entry) | Self::Embedded { entry, .. } => *entry,
+        }
+    }
+}
+
+impl ObjectLookup<'_> {
+    /// Returns what a program read of the bin at `found` resolves against.
+    pub fn resolution(&self, found: Declared) -> Resolution<'_> {
+        Resolution {
+            document: self.document(found),
+            names: self.names(),
+            assets: self.assets(),
+            shaders: self.shaders(),
+        }
+    }
+
+    /// Reads the programs of `targets`, one for one and in that order, each from the first bin
+    /// of the lookup that declares its entry.
+    ///
+    /// The answer is none where no bin of the lookup declares the entry or an embedded path
+    /// reaches no struct. `read` answers asset bytes as [`read_programs`] reads them.
+    pub fn programs(
+        &mut self,
+        targets: &[ProgramTarget],
+        options: ProgramOptions,
+        translations: &TranslationCache,
+        read: &mut dyn FnMut(&AssetRef) -> AppResult<Vec<u8>>,
+    ) -> Vec<Option<MaterialProgram>> {
+        let places: Vec<Option<Declared>> = targets
+            .iter()
+            .map(|target| self.find(target.entry()))
+            .collect();
+        let mut bins: Vec<Declared> = Vec::new();
+        for found in places.iter().flatten() {
+            if !bins.contains(found) {
+                bins.push(*found);
+            }
+        }
+
+        let mut programs = vec![None; targets.len()];
+        for found in bins {
+            let resolution = self.resolution(found);
+            let at: Vec<usize> = (0..targets.len())
+                .filter(|index| places[*index] == Some(found))
+                .collect();
+            let objects: Vec<BinHash> = at
+                .iter()
+                .filter_map(|index| match &targets[*index] {
+                    ProgramTarget::Object(entry) => Some(*entry),
+                    ProgramTarget::Embedded { .. } => None,
+                })
+                .collect();
+
+            let mut read_objects =
+                read_programs(resolution, &objects, options, translations, read).into_iter();
+            for index in at {
+                programs[index] = match &targets[index] {
+                    ProgramTarget::Object(_) => read_objects.next().flatten(),
+                    ProgramTarget::Embedded { entry, path } => {
+                        read_embedded_program(resolution, *entry, path, options, translations, read)
+                    }
+                };
+            }
+        }
+        programs
+    }
+}
+
 /// The programs of the materials `entries` name, one for one and in that order, none
 /// where the document declares no object under the entry.
+///
+/// An entry of class `CustomShaderDef` is resolved as a material of one pass that sets
+/// nothing, so its program uses the shader's own defaults.
 ///
 /// `read` answers the bytes of an asset the resolution locates, which is how the TOC and
 /// bundle chunks of the shader cache are reached.
@@ -318,9 +407,16 @@ pub fn read_programs(
     entries
         .iter()
         .map(|entry| {
-            let material = resolve_passes(document, *entry, names, assets, shaders)
-                .inspect_err(|e| tracing::debug!(?entry, "Passed over a material: {e}"))
-                .ok()?;
+            let shader_def = document
+                .object_at(*entry)
+                .is_some_and(|object| object.class_hash == CUSTOM_SHADER_DEF);
+            let material = if shader_def {
+                resolve_shader_pass(document, *entry, names, assets)
+            } else {
+                resolve_passes(document, *entry, names, assets, shaders)
+            }
+            .inspect_err(|e| tracing::debug!(?entry, "Passed over a material: {e}"))
+            .ok()?;
             Some(material_program(material, options, &mut cache))
         })
         .collect()
@@ -350,6 +446,188 @@ pub fn read_embedded_program(
     let mut source = AssetChunks { assets, read };
     let mut cache = ShaderCache::new(&mut source, translations);
     Some(material_program(material, options, &mut cache))
+}
+
+/// A shader def's program, and the defines that select among its permutations.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+pub struct ShaderProgram {
+    /// The program that the preview draws.
+    pub program: MaterialProgram,
+    /// The defines that the shader's two TOCs declare, sorted by name. Empty if a TOC cannot
+    /// be read.
+    pub declared: Vec<DeclaredDefine>,
+}
+
+/// One define a shader's TOCs declare, with every value they declare it with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(specta::Type))]
+pub struct DeclaredDefine {
+    /// The define name.
+    pub name: String,
+    /// Every value that the TOCs declare for the name, sorted.
+    pub values: Vec<String>,
+}
+
+/// Reads the program of the `CustomShaderDef` at `entry` with the `preview` defines set over
+/// its define list. Returns `None` if the document has no object at `entry`, or if the pass
+/// does not resolve.
+///
+/// Without `material`, the def uses its own defaults. With it, the def is resolved through the
+/// `StaticMaterialDef` at `material.1` of the bin `material.0`, with the resolution's document
+/// as the shader defs, so an unsaved edit to the def is read. Each entry of `preview` is
+/// `NAME=VALUE` and replaces the pass's value of the name. An entry without `=` is skipped.
+/// `read` reads the bytes of an asset, as in [`read_programs`].
+pub fn read_shader_program(
+    resolution: Resolution<'_>,
+    entry: BinHash,
+    material: Option<(&BinDocument, BinHash)>,
+    preview: &[String],
+    options: ProgramOptions,
+    translations: &TranslationCache,
+    read: &mut dyn FnMut(&AssetRef) -> AppResult<Vec<u8>>,
+) -> Option<ShaderProgram> {
+    let Resolution {
+        document,
+        names,
+        assets,
+        ..
+    } = resolution;
+    object_at(document, entry)
+        .inspect_err(|e| tracing::debug!(?entry, "Passed over a shader def: {e}"))
+        .ok()?;
+
+    let resolved = match material {
+        Some((bin, at)) => resolve_passes(bin, at, names, assets, Some(document)),
+        None => resolve_shader_pass(document, entry, names, assets),
+    };
+    let mut material = resolved
+        .inspect_err(|e| tracing::debug!(?entry, "Passed over a shader preview: {e}"))
+        .ok()?;
+    for pass in &mut material.passes {
+        with_preview(&mut pass.defines, preview);
+    }
+    let shader = material.passes.first().and_then(|pass| pass.shader.clone());
+
+    let mut source = AssetChunks { assets, read };
+    let mut cache = ShaderCache::new(&mut source, translations);
+    let program = nearest_program(material, options, &mut cache);
+    let declared = shader
+        .and_then(|path| cache.declared(ShaderPath::Generated(&path)).ok())
+        .map(grouped)
+        .unwrap_or_default();
+
+    Some(ShaderProgram { program, declared })
+}
+
+/// Returns the program of `material`. A pass whose define list selects no compiled
+/// permutation uses the nearest list that does, and a warning lists the changed defines.
+///
+/// The search keeps the values of [`KEPT_DEFINES`] and of the preview's defines.
+fn nearest_program(
+    material: ResolvedMaterial,
+    options: ProgramOptions,
+    cache: &mut ShaderCache<'_>,
+) -> MaterialProgram {
+    let mut program = material_program(material, options, cache);
+
+    for pass in &mut program.passes {
+        if !matches!(pass.program, ProgramRead::Failed { .. }) {
+            continue;
+        }
+        let Some(shader) = pass.pass.shader.clone() else {
+            continue;
+        };
+
+        let path = ShaderPath::Generated(&shader);
+        let requested = define_list(&pass.pass, program.kind, options);
+        let picked = pass
+            .pass
+            .defines
+            .iter()
+            .filter(|define| define.source == DefineSource::Preview)
+            .map(|define| define.name.as_str());
+        let fixed: Vec<&str> = KEPT_DEFINES.into_iter().chain(picked).collect();
+        let Ok(Some(found)) = cache.nearest(path, &requested, &fixed, NEAREST_CHANGES) else {
+            continue;
+        };
+        if found == requested {
+            continue;
+        }
+
+        pass.program = program_read(cache, path, &found);
+        if matches!(pass.program, ProgramRead::Ready { .. }) {
+            program.warnings.push(changes(&requested, &found));
+        }
+    }
+    program
+}
+
+/// The defines that the nearest permutation search never changes: the studio defines, and
+/// the engine defines that the studio does not set.
+const KEPT_DEFINES: [&str; 8] = [
+    "DISABLE_FOW",
+    "DISABLE_SHADOWS",
+    "NUM_BLEND_WEIGHTS",
+    "LOW_QUALITY_MODE",
+    "FORCE_MANTIS_LIGHTING",
+    "USE_DYNAMIC_LIGHTING",
+    "GENERATE_SHADOW_MAP",
+    "IS_AROUND_GAME",
+];
+
+/// The maximum number of defines that the nearest permutation search changes. At 3, the
+/// search tries fewer than 100,000 lists on the largest TOC.
+const NEAREST_CHANGES: usize = 3;
+
+/// Returns a warning that lists the defines that `found` sets and removes relative to
+/// `requested`.
+fn changes(requested: &Defines, found: &Defines) -> MaterialWarning {
+    let set = found
+        .iter()
+        .filter(|(name, value)| requested.get(name) != Some(*value))
+        .map(|(name, value)| format!("{name}={value}"))
+        .collect();
+    let unset = requested
+        .iter()
+        .filter(|(name, _)| found.get(name).is_none())
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    MaterialWarning::NearestPermutation { set, unset }
+}
+
+/// Sets each `NAME=VALUE` entry of `preview` over `defines` and sorts the list by name. An
+/// entry without `=` is skipped.
+fn with_preview(defines: &mut Vec<Define>, preview: &[String]) {
+    for (name, value) in preview.iter().filter_map(|entry| entry.split_once('=')) {
+        let define = Define {
+            name: name.to_owned(),
+            value: value.to_owned(),
+            source: DefineSource::Preview,
+        };
+        match defines.iter_mut().find(|each| each.name == name) {
+            Some(existing) => *existing = define,
+            None => defines.push(define),
+        }
+    }
+    defines.sort_by(|a, b| a.name.cmp(&b.name));
+}
+
+/// Groups sorted `(name, value)` pairs into one define per name.
+fn grouped(pairs: Vec<(String, String)>) -> Vec<DeclaredDefine> {
+    let mut declared: Vec<DeclaredDefine> = Vec::new();
+    for (name, value) in pairs {
+        match declared.last_mut() {
+            Some(last) if last.name == name => last.values.push(value),
+            _ => declared.push(DeclaredDefine {
+                name,
+                values: vec![value],
+            }),
+        }
+    }
+    declared
 }
 
 /// `material` with a program for each of its passes, a failed one logged.

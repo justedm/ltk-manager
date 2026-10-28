@@ -95,6 +95,7 @@ const SETTING_FORMAT: Partial<Record<SettingKey, SettingFormat>> = {
   reloadModsHotkey: optional("None", plain),
 
   autoCategorizationEnabled: onOff,
+  autoHealthCheckEnabled: onOff,
   promoteEnabledMods: onOff,
   watcherEnabled: onOff,
 
@@ -105,9 +106,9 @@ const SETTING_FORMAT: Partial<Record<SettingKey, SettingFormat>> = {
   patchTft: onOff,
   elevateInjector: onOff,
   blockScriptsWad: onOff,
-  linkedBinCheckEnabled: onOff,
   fullWadScan: onOff,
   verbosePatcherLogging: onOff,
+  betaPatcher: onOff,
   readGameLog: onOff,
   disableCrashReporting: onOff,
   keepIncidents: plain,

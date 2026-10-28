@@ -60,11 +60,16 @@ const INDEX = [
   { id: "general.minimizeToTray", key: "minimizeToTray", title: "Minimize to system tray" },
   { id: "general.startInTray", key: "startInTray", title: "Start minimized to tray" },
 
-  { id: "library.modStoragePath", key: "modStoragePath", title: "Storage location" },
+  { id: "library.modStoragePath", key: "modStoragePath", title: "Data location" },
   {
     id: "library.autoCategorizationEnabled",
     key: "autoCategorizationEnabled",
     title: "Automatically categorize mods",
+  },
+  {
+    id: "library.autoHealthCheckEnabled",
+    key: "autoHealthCheckEnabled",
+    title: "Automatically check mods",
   },
   {
     id: "library.promoteEnabledMods",
@@ -129,12 +134,8 @@ const INDEX = [
     key: "verbosePatcherLogging",
     title: "Verbose patcher logging",
   },
+  { id: "patching.betaPatcher", key: "betaPatcher", title: "Beta patcher" },
   { id: "patching.blockScriptsWad", key: "blockScriptsWad", title: "Block Scripts.wad.client" },
-  {
-    id: "patching.linkedBinCheckEnabled",
-    key: "linkedBinCheckEnabled",
-    title: "Warn about missing dependencies",
-  },
   { id: "patching.fullWadScan", key: "fullWadScan", title: "Scan every WAD up front" },
   {
     id: "patching.disableCrashReporting",

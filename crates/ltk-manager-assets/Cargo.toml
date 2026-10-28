@@ -19,6 +19,7 @@ ltk-manager-base = { workspace = true }
 camino = { workspace = true }
 fs-err = { workspace = true }
 glam = { workspace = true }
+gltf = { workspace = true }
 image = { workspace = true }
 image_dds = { workspace = true }
 indexmap = { workspace = true }
@@ -26,6 +27,7 @@ lru = { workspace = true }
 ltk_anim = { workspace = true }
 ltk_fantome = { workspace = true }
 ltk_file = { workspace = true }
+ltk_game_index = { workspace = true, features = ["search"] }
 ltk_hash = { workspace = true }
 ltk_hashdb = { workspace = true }
 ltk_hashtable = { workspace = true }
@@ -44,7 +46,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+ufbx = { workspace = true }
 walkdir = { workspace = true }
+xxhash-rust = { workspace = true }
 zip = { workspace = true }
 specta = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }

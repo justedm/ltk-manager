@@ -14,19 +14,18 @@ fn builder() -> Builder<Wry> {
     use ltk_manager_base::events::LayoutMigrationReport;
     use ltk_manager_base::events::ReferenceWalkProgress;
     use ltk_manager_base::events::{
-        ExportProgress, ExtractProgress, FantomeImportProgress, GitImportProgress,
-        HashtableSyncProgress, HealthSweepProgress, InstallProgress, LayoutMigrationProgress,
-        MigrationProgress, ModRepairProgress, ModStorageProgress, OverlayProgress,
+        DataMoveProgress, ExportProgress, ExtractProgress, FantomeImportProgress,
+        GitImportProgress, HashtableSyncProgress, HealthSweepProgress, InstallProgress,
+        LayoutMigrationProgress, MigrationProgress, ModRepairProgress, ModStorageProgress,
+        OverlayProgress,
     };
     use ltk_manager_base::events::{
         LaunchProgress, SessionChanged, SessionEnded, SessionGameRunning, SessionStarted,
     };
     use ltk_manager_runtime::diagnostics::incident::Incident;
 
-    use crate::patcher::thread::{
-        GameAttachedPayload, GameOverlayPayload, LinkedBinWarningPayload, WadScanFailedPayload,
-    };
-    use ltk_manager_base::events::ProtocolInstallProgress;
+    use crate::patcher::thread::{GameAttachedPayload, GameOverlayPayload, WadScanFailedPayload};
+    use ltk_manager_base::events::{ProtocolInstallProgress, RuneforgePublishProgress};
     use ltk_manager_core::deep_link::{DeepLinkInstallRequest, DeepLinkSettingsRequest};
 
     /* A 64-bit integer crosses as a JS number. None reaches the range where that loses
@@ -34,6 +33,7 @@ fn builder() -> Builder<Wry> {
     Builder::<Wry>::new()
         .types(&crate::services::types())
         // Event payloads, which no command signature reaches.
+        .typ::<DataMoveProgress>()
         .typ::<ExportProgress>()
         .typ::<ExtractProgress>()
         .typ::<FantomeImportProgress>()
@@ -58,9 +58,9 @@ fn builder() -> Builder<Wry> {
         .typ::<DeepLinkInstallRequest>()
         .typ::<DeepLinkSettingsRequest>()
         .typ::<ProtocolInstallProgress>()
+        .typ::<RuneforgePublishProgress>()
         .typ::<GameAttachedPayload>()
         .typ::<GameOverlayPayload>()
-        .typ::<LinkedBinWarningPayload>()
         .typ::<WadScanFailedPayload>()
         .dangerously_cast_bigints_to_number()
 }
