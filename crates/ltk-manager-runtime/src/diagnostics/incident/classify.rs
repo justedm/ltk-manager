@@ -339,7 +339,7 @@ impl GameRecord {
             .filter_map(|failure| failure.wad.clone())
             .collect();
         let suspects = ctx.writers_of(&wads, Because::Rejected);
-        let mut verdict = Verdict::new(status.kind(), "").with_hint(status.hint());
+        let mut verdict = Verdict::new(VerdictKind::ArchiveRejected, "").with_hint(status.hint());
         if let Some(wad) = first.wad.as_deref() {
             verdict = verdict.with_subject(last_segment(wad));
             if self.is_workshop() {

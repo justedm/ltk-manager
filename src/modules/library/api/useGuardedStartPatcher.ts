@@ -6,8 +6,7 @@ import { type PatcherConfig } from "@/lib/tauri";
 import { useStartPatcher } from "@/modules/patcher/api";
 
 /**
- * Shared start path for both the manual and auto-start flows. It force-disables any
- * enabled skinhack mods (which would crash the game), then starts the patcher.
+ * Starts the patcher from the manual and auto-start flows.
  */
 export function useGuardedStartPatcher() {
   const startPatcher = useStartPatcher();

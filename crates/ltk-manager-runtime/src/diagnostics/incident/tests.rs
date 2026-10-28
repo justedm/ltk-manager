@@ -261,34 +261,33 @@ fn a_rejected_archive_names_its_writers() {
     let mut record = clean(modded_game());
     record.scan_failures = vec![WadScanFailure {
         wad: Some("DATA/FINAL/Champions/Aatrox.wad.client".to_string()),
-        status: "c0000229".to_string(),
+        status: "deadbeef".to_string(),
     }];
     let incident = classify(&record, &no_path).unwrap();
-    assert_eq!(incident.verdict.kind, VerdictKind::SkinhackDetected);
+    assert_eq!(incident.verdict.kind, VerdictKind::ArchiveRejected);
     assert_eq!(
         incident.verdict.subject.as_deref(),
         Some("Aatrox.wad.client")
     );
-    assert_eq!(incident.scan_status, Some(ScanStatus::Skinhack));
-    assert_eq!(incident.scan_status_code.as_deref(), Some("c0000229"));
+    assert_eq!(incident.scan_status, Some(ScanStatus::Unknown));
+    assert_eq!(incident.scan_status_code.as_deref(), Some("deadbeef"));
     assert_eq!(incident.scan_rejected, 1);
     // The words are the frontend's, from the three fields above.
     assert!(incident.verdict.cause.is_empty());
     // The finding a player recognises, not the machinery that caught it.
-    assert_eq!(incident.verdict.title, "Skinhack Detection");
+    assert_eq!(incident.verdict.title, "Archive Scan Rejection");
     assert_eq!(incident.verdict.title_override, None);
     assert_eq!(names(&incident), ["Aatrox Justicar"]);
     assert_eq!(
         incident.suspects[0].because,
         "writes Aatrox.wad.client, which the scan rejected"
     );
-    assert_eq!(incident.verdict.hints, [Hint::RemoveSkinhack]);
+    assert_eq!(incident.verdict.hints, [Hint::CopyReport]);
 
     record.scan_failures[0].status = "base_skin".to_string();
     let incident = classify(&record, &no_path).unwrap();
     assert_eq!(incident.scan_status, Some(ScanStatus::BaseSkin));
     assert_eq!(incident.verdict.hints, [Hint::ReimportMod]);
-    // Only a skinhack reaches its own kind.
     assert_eq!(incident.verdict.kind, VerdictKind::ArchiveRejected);
     assert_eq!(incident.verdict.title, "Archive Scan Rejection");
 
@@ -319,7 +318,6 @@ fn a_rejected_archive_names_its_writers() {
 #[test]
 fn every_token_the_dll_emits_reads_and_advises() {
     let table = [
-        ("c0000229", ScanStatus::Skinhack),
         ("c0000225", ScanStatus::MissingBin),
         ("c000003e", ScanStatus::Corrupt),
         ("mod_wad", ScanStatus::BaseSkin),
@@ -339,10 +337,9 @@ fn every_token_the_dll_emits_reads_and_advises() {
         );
     }
     // The game writes its codes with the prefix as often as without.
-    assert_eq!(ScanStatus::parse("0xC0000229"), ScanStatus::Skinhack);
+    assert_eq!(ScanStatus::parse("0xDEADBEEF"), ScanStatus::Unknown);
 
     for status in [
-        ScanStatus::Skinhack,
         ScanStatus::MissingBin,
         ScanStatus::Corrupt,
         ScanStatus::OutOfMemory,
@@ -359,14 +356,7 @@ fn every_token_the_dll_emits_reads_and_advises() {
 #[test]
 fn a_rejection_reads_back_the_status_it_wrote() {
     for wad in [Some("Aatrox.wad.client".to_string()), None] {
-        for status in [
-            "c0000229",
-            "base_skin",
-            "mod_wad",
-            "base_wad",
-            "c000003e",
-            "deadbeef",
-        ] {
+        for status in ["base_skin", "mod_wad", "base_wad", "c000003e", "deadbeef"] {
             let failure = WadScanFailure {
                 wad: wad.clone(),
                 status: status.to_string(),
@@ -1183,7 +1173,6 @@ fn the_token_numbers_are_pinned() {
             (VerdictKind::StuckLoading, 11),
             (VerdictKind::ArchiveSkipped, 12),
             (VerdictKind::EndedWithoutReason, 13),
-            (VerdictKind::SkinhackDetected, 14),
             (VerdictKind::OverlayBuildFailed, 15),
             (VerdictKind::InjectionHostFailed, 16),
             (VerdictKind::WrongInstall, 17),
@@ -1301,8 +1290,7 @@ fn the_record_keeps_what_the_token_needs() {
 }
 
 /// Every kind that turns the overlay off says so, whatever reached the
-/// manager first. The skinhack rejection is the case this exists for: the
-/// DLL acted, so the cost is a fact and no reading of a log code enters.
+/// manager first. A rejected archive costs the overlay, whatever its status.
 #[test]
 fn a_verdict_costs_what_its_kind_costs() {
     use Consequence::*;

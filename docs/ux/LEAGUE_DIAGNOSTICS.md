@@ -576,7 +576,6 @@ The rows are in precedence order. The first row whose evidence is present wins.
 | Wrong League install       | A log whose `-GameBaseDir` is not the configured install                                             | game-stopped    | No          |
 | DLL injection failure      | A build error, or `InjectionFailed` at either stage                                                  | overlay-off     | Sometimes   |
 | Unsupported game build     | `end of life reached` on the `dll` lines                                                             | overlay-off     | No          |
-| Legacy Skinhack detection  | Stored `patcher-wad-scan-failed`, status `c0000229`                                                  | overlay-off     | Yes         |
 | Archive scan rejection     | `patcher-wad-scan-failed`, any other status                                                          | overlay-off     | Yes         |
 | Overlay verification fail. | `overlay verification failed`, with its archive                                                      | overlay-off     | Yes         |
 | No mods applied            | A game the session or the host saw, and no live overlay in it                                        | overlay-off     | No          |
@@ -639,27 +638,20 @@ to update LTK Manager. A patch day produces this one, and it is the verdict that
 wave of "mods stopped working" into one sentence.
 
 **An archive was rejected.** This is `WadScanFailedDialog`. The incident records what the
-dialog showed, so the Games tab can show it again after the dialog is gone. Both read one
-classification, `ScanStatus`, rather than each keeping a table: `c0000229` a skinhack,
-`c0000225` a missing bin, `c000003e` a corrupt archive, `c0000017` and `c000009a` out of
-memory, `mod_wad` a base skin with a mesh missing, which reads as an incomplete mod rather
-than a skinhack, and `base_wad` the game's own copy of the archive, where no mod is at
-fault. `base_skin` is what `mod_wad` was called before, and reads the same so a history
-written by an older DLL survives the update.
-
-The patcher no longer enables blocking skinhack enforcement. The dedicated status remains so
-incidents written by earlier builds keep their original classification and guidance.
+dialog showed, so the Games tab can show it again after the dialog is gone. Both surfaces
+read `ScanStatus`. It classifies `c0000225` as a missing bin, `c000003e` as a corrupt
+archive, `c0000017` and `c000009a` as out of memory, `mod_wad` as a base skin with a mesh
+missing, and `base_wad` as the game's own copy of the archive. Other status codes read as
+unknown.
 
 The backend classifies and stops there. It records the status, the token behind it and how
 many archives the scan rejected, and leaves the verdict's cause empty, so the words are
 written once on the frontend and the dialog and the Games tab cannot word one event two
 ways. An incident stored before that keeps the sentence it was recorded with.
 
-Every status carries a fix, because a rejection a player cannot act on is the same dead end
-whichever code produced it. A skinhack says to disable the mod, a missing bin, a corrupt
-archive and an incomplete base skin say to re-import it, out of memory says to close what
-else is running, the game's own copy says to repair the install, and a status this build
-cannot name says to copy the report.
+Every status carries a fix. A missing bin, a corrupt archive and an incomplete base skin say
+to re-import the mod, out of memory says to close what else is running, the game's own copy
+says to repair the install, and a status this build cannot name says to copy the report.
 
 **The overlay was disabled.** `The patcher turned the overlay off before the game loaded.`
 The eager scan fails closed, so the first archive that does not verify disables every mod
@@ -781,9 +773,6 @@ cannot ship without saying what it costs, and every verdict carries one.
 The first two cost the player everything they asked for and take `danger`. The last two cost
 part of it and take `warning`.
 
-A stored skinhack rejection is a legacy case. The manager now opts out of blocking enforcement,
-but keeps the verdict kind so older incidents retain their original consequence.
-
 **Suspects carry no grade.** The `because` sentence is the whole claim, and how direct the
 link is reads out of what it says - _writes Aatrox.wad.client, which holds the path_ is not
 the same sentence as _writes Aatrox.wad.client, redirected this game_. A word on top of that
@@ -822,7 +811,6 @@ sentence, and a stored code this build does not know reads as nothing. Neither i
 | `start-first`        | Start the patcher first           | The DLL joined too late                                                   |
 | `copy-report`        | Copy the report                   | An ending without a reason, or a scan status without a name               |
 | `disable-suspect`    | Disable the suspect               | Missing data, in a library game                                           |
-| `remove-skinhack`    | Disable the mod the scan named    | A stored legacy skinhack rejection                                        |
 | `reimport-mod`       | Re-import the mod the scan named  | A missing bin, a corrupt archive, or an incomplete base skin              |
 | `repair-game`        | Repair the install                | The scan objected to a file the game ships                                |
 | `elevate`            | Let the host elevate              | The DLL never attached, and the host was not elevated                     |

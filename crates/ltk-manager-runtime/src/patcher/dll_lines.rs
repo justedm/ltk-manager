@@ -216,13 +216,13 @@ mod tests {
     #[test]
     fn overlay_disabled_names_the_archive_and_the_reason() {
         let line = format!(
-            "{TARGET}overlay verification failed, disabling overlay: wad data/final/champions/briar.wad.client: anti-hack scan blocked (c0000229): 21a1ca943ae71cbc"
+            "{TARGET}overlay verification failed, disabling overlay: wad data/final/champions/briar.wad.client: archive scan failed (deadbeef): 21a1ca943ae71cbc"
         );
         assert_eq!(
             DllLine::parse(&line),
             Some(DllLine::OverlayDisabled {
                 wad: "briar.wad.client".to_string(),
-                why: "anti-hack scan blocked (c0000229): 21a1ca943ae71cbc".to_string(),
+                why: "archive scan failed (deadbeef): 21a1ca943ae71cbc".to_string(),
             })
         );
     }
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn a_scan_record_is_read_whatever_its_status() {
-        for status in ["c0000229", "base_skin"] {
+        for status in ["deadbeef", "base_skin"] {
             let line = format!("{TARGET}WAD scan failed status with {status} for briar.wad.client");
             assert_eq!(DllLine::parse(&line), Some(DllLine::ScanFailed));
         }
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn an_opted_out_scan_record_names_no_failure() {
-        let line = "WAD scan failed status with c0000229 for Ahri.wad.client";
+        let line = "WAD scan failed status with deadbeef for Ahri.wad.client";
         assert_eq!(DllLine::parse(line), Some(DllLine::ScanFailed));
         assert_eq!(parse_wad_scan_failure(DllLevel::Warn, line), None);
         assert!(parse_wad_scan_failure(DllLevel::Error, line).is_some());
@@ -346,10 +346,10 @@ mod tests {
 
     #[test]
     fn detects_wad_scan_failure_with_wad_and_status() {
-        let msg = "error: WAD scan failed status with c0000229 for Ahri.wad.client";
+        let msg = "error: WAD scan failed status with deadbeef for Ahri.wad.client";
         let failure = parse_wad_scan_failure(DllLevel::Error, msg).expect("should detect failure");
         assert_eq!(failure.wad.as_deref(), Some("Ahri.wad.client"));
-        assert_eq!(failure.status, "c0000229");
+        assert_eq!(failure.status, "deadbeef");
     }
 
     #[test]
@@ -403,15 +403,15 @@ mod tests {
     #[test]
     fn detects_wad_scan_failure_from_ltk_patcher_dll_target() {
         let msg =
-            "ltk_patcher_dll::verify: WAD scan failed status with c0000229 for briar.wad.client";
+            "ltk_patcher_dll::verify: WAD scan failed status with deadbeef for briar.wad.client";
         let failure = parse_wad_scan_failure(DllLevel::Error, msg).expect("should detect failure");
         assert_eq!(failure.wad.as_deref(), Some("briar.wad.client"));
-        assert_eq!(failure.status, "c0000229");
+        assert_eq!(failure.status, "deadbeef");
     }
 
     #[test]
     fn ignores_overlay_verification_failed_line() {
-        assert!(parse_wad_scan_failure(DllLevel::Error, "ltk_patcher_dll::verify: overlay verification failed, disabling overlay: wad data/final/champions/briar.wad.client: anti-hack scan blocked (c0000229): 21a1ca943ae71cbc a9d31e88e92e4715"
+        assert!(parse_wad_scan_failure(DllLevel::Error, "ltk_patcher_dll::verify: overlay verification failed, disabling overlay: wad data/final/champions/briar.wad.client: archive scan failed (deadbeef): 21a1ca943ae71cbc a9d31e88e92e4715"
         )
         .is_none());
     }

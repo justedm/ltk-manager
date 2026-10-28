@@ -80,9 +80,8 @@ pub enum InjectorEvent {
 pub struct WadScanFailure {
     /// The archive (e.g. `TahmKench.wad.client`), if we could parse the name.
     pub wad: Option<String>,
-    /// The NTSTATUS-style code the scan reported (e.g. `c0000229` skinhack,
-    /// `c000003e` parse error). Callers classify it, and the injector stays
-    /// status-agnostic.
+    /// The NTSTATUS-style code the scan reported (e.g. `c000003e` parse error).
+    /// Callers classify it, and the injector stays status-agnostic.
     pub status: String,
 }
 
@@ -574,7 +573,7 @@ mod tests {
     fn wad_failure_line(wad: &str) -> String {
         dll_line(
             "error",
-            &format!("error: WAD scan failed status with c0000229 for {wad}"),
+            &format!("error: WAD scan failed status with deadbeef for {wad}"),
         )
     }
 

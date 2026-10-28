@@ -24,17 +24,6 @@ export function isInformational(kind: VerdictKind): boolean {
 }
 
 /**
- * The scan rejected an archive for carrying a Riot skin ported onto a base
- * champion.
- *
- * Its own verdict kind, so this reads one field. A rejection for any other
- * status stays `archive-rejected` and takes neither the art nor the hue.
- */
-export function isSkinhackRejection(incident: Incident): boolean {
-  return incident.verdict.kind === "skinhack-detected";
-}
-
-/**
  * The line under a row's title: the subject where there is one, else the first
  * suspect.
  *
@@ -247,16 +236,6 @@ export const OVERLAY_DETAIL_LABELS: Readonly<Partial<Record<OverlayOutcome, stri
   },
 };
 
-/**
- * The heading a caught skinhack reads under, in place of the verdict's own.
- *
- * The rail has room for the finding and the card has room for the verb, so the
- * two say the same thing at the length each has.
- */
-function skinhackTitle(): string {
-  return m.diagnostics_skinhack_title();
-}
-
 function shaderFailureLead({ variants: count, missingPipeline }: ShaderFailure): string {
   if (count === 0) return m.diagnostics_shader_pipeline_description();
   if (missingPipeline) return m.diagnostics_shader_compile_pipeline_description({ count });
@@ -280,9 +259,4 @@ export function verdictCause(incident: Incident): string {
   if (incident.verdict.cause) return incident.verdict.cause;
   if (incident.shader) return shaderFailureCause(incident.shader);
   return scanRejectionCause(incident);
-}
-
-/** The verdict's heading as the player reads it, wherever the incident is drawn. */
-export function verdictTitle(incident: Incident): string {
-  return isSkinhackRejection(incident) ? skinhackTitle() : incident.verdict.title;
 }

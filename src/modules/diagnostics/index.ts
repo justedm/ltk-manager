@@ -16,4 +16,4 @@ export {
 } from "./api";
 export * from "./components";
 export { offersRebuild } from "./utils/hints";
-export { isInformational, verdictTitle } from "./utils/incident";
+export { isInformational } from "./utils/incident";

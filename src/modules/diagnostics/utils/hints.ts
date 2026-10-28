@@ -19,7 +19,6 @@ const HINT_TEXT: Readonly<Record<Hint, (context: HintContext) => string>> = {
   "scan-up-front": () => m["hint.scan-up-front"](),
   "copy-report": () => m["hint.copy-report"](),
   "disable-suspect": () => m["hint.disable-suspect"](),
-  "remove-skinhack": () => m["hint.remove-skinhack"](),
   "reimport-mod": () => m["hint.reimport-mod"](),
   "repair-game": () => m["hint.repair-game"](),
   elevate: () => m["hint.elevate"](),

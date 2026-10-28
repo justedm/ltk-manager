@@ -114,10 +114,6 @@
   --ltk-socket-vec2-text: var(--ltk-socket-vec2);
   --ltk-socket-vec3-text: var(--ltk-socket-vec3);
   --ltk-socket-vec4-text: var(--ltk-socket-vec4);
-
-  /* Void hue for skinhack detection. */
-  --ltk-void: #c084fc;
-  --ltk-void-text: var(--ltk-void);
 }
 
 [data-theme="light"] {
@@ -149,7 +145,6 @@
   --ltk-syntax-function-text: color-mix(in srgb, var(--ltk-syntax-function) 40%, black);
   --ltk-syntax-type-text: color-mix(in srgb, var(--ltk-syntax-type) 50%, black);
   --ltk-graph-geometry-text: color-mix(in srgb, var(--ltk-graph-geometry) 55%, black);
-  --ltk-void-text: color-mix(in srgb, var(--ltk-void) 50%, black);
   --ltk-channel-1-text: color-mix(in srgb, var(--ltk-channel-1) 55%, black);
   --ltk-channel-2-text: color-mix(in srgb, var(--ltk-channel-2) 55%, black);
   --ltk-channel-3-text: color-mix(in srgb, var(--ltk-channel-3) 55%, black);

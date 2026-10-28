@@ -5,43 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Verdict } from "@/lib/tauri";
 import { createMockIncident } from "@/modules/diagnostics/components/__tests__/fixtures";
 
-import { describeExitCode, isSkinhackRejection, subjectLine, verdictCause } from "../incident";
-
-const skinhack: Verdict = {
-  kind: "skinhack-detected",
-  title: "Skinhack Detection",
-  cause: "The scan found a skinhack.",
-  subject: "graves.wad.client",
-  consequence: "overlay-off",
-  titleOverride: null,
-  hints: [],
-};
-
-describe("isSkinhackRejection", () => {
-  it("holds for the verdict the scan reached", () => {
-    expect(isSkinhackRejection(createMockIncident({ verdict: skinhack }))).toBe(true);
-  });
-
-  /// The status alone never decides it. A rejection for another reason is a
-  /// different verdict and takes neither the art nor the hue.
-  it("does not hold for a rejection with another status", () => {
-    const incident = createMockIncident({
-      verdict: { ...skinhack, kind: "archive-rejected", title: "Archive Scan Rejection" },
-      scanStatus: "missing-bin",
-    });
-
-    expect(isSkinhackRejection(incident)).toBe(false);
-  });
-
-  /// A skinhack the game caught can lose the verdict to a failure that outranks
-  /// it, and the art follows the verdict rather than the status.
-  it("does not hold when another verdict won", () => {
-    const incident = createMockIncident({ scanStatus: "skinhack" });
-
-    expect(incident.verdict.kind).not.toBe("skinhack-detected");
-    expect(isSkinhackRejection(incident)).toBe(false);
-  });
-});
+import { describeExitCode, subjectLine, verdictCause } from "../incident";
 
 describe("describeExitCode", () => {
   /// The bare number is a reader's only clue to what killed the game, so the

@@ -987,6 +987,13 @@ export type Config_Deserialize = {
 	/**  Enabling a mod moves it to the front of its folder. Off by default. */
 	promoteEnabledMods?: boolean,
 	/**
+	 *  Whether to enforce the anti-skinhack scan while patching. When on
+	 *  (default), a champion WAD that fails the scan aborts patching. When off,
+	 *  the `CSLOL_HOOK_OPT_OUT_AH_V1` hook flag is set so failures are
+	 *  downgraded to warnings and flagged mods load anyway. Default: true.
+	 */
+	enforceSkinhackScan?: boolean,
+	/**
 	 *  Whether mods' string overrides are applied to every installed locale
 	 *  instead of only the locale the League client is configured to use.
 	 *  Default: false (current locale only).
@@ -1100,6 +1107,13 @@ export type Config_Serialize = {
 	autoHealthCheckEnabled: boolean,
 	/**  Enabling a mod moves it to the front of its folder. Off by default. */
 	promoteEnabledMods: boolean,
+	/**
+	 *  Whether to enforce the anti-skinhack scan while patching. When on
+	 *  (default), a champion WAD that fails the scan aborts patching. When off,
+	 *  the `CSLOL_HOOK_OPT_OUT_AH_V1` hook flag is set so failures are
+	 *  downgraded to warnings and flagged mods load anyway. Default: true.
+	 */
+	enforceSkinhackScan: boolean,
 	/**
 	 *  Whether mods' string overrides are applied to every installed locale
 	 *  instead of only the locale the League client is configured to use.
@@ -3156,7 +3170,7 @@ export type HexBinHash = string;
  *  A code on the wire and in the store. The frontend catalog owns the sentence
  *  (ADR-0017), and the report text takes the sentences from there.
  */
-export type Hint = "system-checks" | "update-manager" | "rebuild-overlay" | "check-game-path" | "texture-dimensions" | "repair-install" | "update-driver" | "free-memory" | "open-project" | "start-first" | "scan-up-front" | "copy-report" | "disable-suspect" | "remove-skinhack" | "reimport-mod" | "repair-game" | "elevate" | "signature" | 
+export type Hint = "system-checks" | "update-manager" | "rebuild-overlay" | "check-game-path" | "texture-dimensions" | "repair-install" | "update-driver" | "free-memory" | "open-project" | "start-first" | "scan-up-front" | "copy-report" | "disable-suspect" | "reimport-mod" | "repair-game" | "elevate" | "signature" |
 /**
  *  A modded archive was in the game, and a texture far larger than what it
  *  replaces raises the odds of an allocation failing.
@@ -7163,8 +7177,6 @@ export type ScanMode = "eager" | "lazy";
  *  code on `patcher-wad-scan-failed` so the dialog keeps no second table.
  */
 export type ScanStatus = 
-/**  An official Riot skin ported onto a base champion. */
-"skinhack" | 
 /**  A linked `.bin` the archive needs is absent. */
 "missing-bin" | 
 /**  Unreadable, or built for an unsupported version. */
@@ -8918,12 +8930,7 @@ export type VerdictKind =
 /**  The overlay could not be built, so there was nothing to inject. */
 "overlay-build-failed" | 
 /**  The injection host never came up. */
-"injection-host-failed" | "patcher-out-of-date" | "archive-rejected" | 
-/**
- *  The scan rejected an archive for a Riot skin ported onto a base
- *  champion, which is the rejection a player has a word for.
- */
-"skinhack-detected" | "overlay-disabled" | "unmodded" | "missing-data" | "corrupt-archive" | "texture-failed" | "out-of-memory" | "graphics-fault" | "stuck-loading" | "archive-skipped" | "ended-without-reason" | 
+"injection-host-failed" | "patcher-out-of-date" | "archive-rejected" | "overlay-disabled" | "unmodded" | "missing-data" | "corrupt-archive" | "texture-failed" | "out-of-memory" | "graphics-fault" | "stuck-loading" | "archive-skipped" | "ended-without-reason" |
 /**  The game ran from another install than the overlay was built for. */
 "wrong-install" | 
 /**  A shader did not compile, or a material had no pipeline to draw with. */
@@ -9100,8 +9107,8 @@ export type WadScanFailureInfo = {
 	/**  The offending archive (e.g. `TahmKench.wad.client`), if its name parsed. */
 	wad: string | null,
 	/**
-	 *  The code the scan reported, an NTSTATUS-style one the game raised
-	 *  (`c0000229`), or a word the DLL's own checks named (`mod_wad`).
+	 *  The code the scan reported, or a word the DLL's own checks named
+	 *  (`mod_wad`).
 	 */
 	status: string,
 	/**
@@ -9223,4 +9230,3 @@ export type WorkshopProject = {
 
 /**  A sampler's address mode, `addressU` and `addressV` on the wire. */
 export type Wrap = "repeat" | "clamp" | "mirror" | "border";
-

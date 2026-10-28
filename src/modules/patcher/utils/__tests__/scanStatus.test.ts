@@ -8,7 +8,6 @@ import { createMockIncident } from "@/modules/diagnostics/components/__tests__/f
 import { pickPrimaryStatus, SCAN_STATUS_MESSAGES, scanRejectionCause } from "../scanStatus";
 
 const ALL: ScanStatus[] = [
-  "skinhack",
   "missing-bin",
   "corrupt",
   "out-of-memory",
@@ -46,25 +45,16 @@ describe("SCAN_STATUS_MESSAGES", () => {
 });
 
 describe("pickPrimaryStatus", () => {
-  it("lets a skinhack win any mix", () => {
-    expect(pickPrimaryStatus(["corrupt", "skinhack", "base-wad"])).toBe("skinhack");
+  it("falls back when a burst has different statuses", () => {
+    expect(pickPrimaryStatus(["corrupt", "base-wad"])).toBe("unknown");
   });
 
   it("keeps a uniform burst's own status", () => {
     expect(pickPrimaryStatus(["base-skin", "base-skin"])).toBe("base-skin");
   });
-
-  it("falls back rather than show one cause's fix for another's failure", () => {
-    expect(pickPrimaryStatus(["corrupt", "base-wad"])).toBe("unknown");
-  });
 });
 
 describe("scanRejectionCause", () => {
-  it("words a rejection from the status alone", () => {
-    const cause = scanRejectionCause(rejected({ scanStatus: "skinhack" }));
-    expect(cause).toBe(SCAN_STATUS_MESSAGES.skinhack.lead);
-  });
-
   it("names the code only for a status it cannot read", () => {
     const cause = scanRejectionCause(
       rejected({ scanStatus: "unknown", scanStatusCode: "deadbeef" }),
@@ -84,24 +74,22 @@ describe("scanRejectionCause", () => {
     );
   });
 
-  /// An incident stored before the backend stopped writing prose keeps the
-  /// sentence it was recorded with, so a history does not reword itself.
-  it("keeps a stored cause", () => {
+  it("uses a stored cause when one exists", () => {
     const cause = scanRejectionCause(
       createMockIncident({
         verdict: {
           kind: "archive-rejected",
           title: "Archive Scan Rejection",
           titleOverride: null,
-          cause: "The scan found a skinhack in graves.wad.client.",
+          cause: "The scan rejected graves.wad.client.",
           subject: "graves.wad.client",
           consequence: "overlay-off",
           hints: [],
         },
-        scanStatus: "skinhack",
+        scanStatus: "corrupt",
       }),
     );
-    expect(cause).toBe("The scan found a skinhack in graves.wad.client.");
+    expect(cause).toBe("The scan rejected graves.wad.client.");
   });
 
   /// Every other verdict still writes its own sentence on the backend, so the

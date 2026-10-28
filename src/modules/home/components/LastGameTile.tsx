@@ -3,12 +3,7 @@ import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 
 import { Button } from "@/components";
 import { m } from "@/i18n";
-import {
-  ConsequenceChip,
-  useLatestIncident,
-  VerdictGlyph,
-  verdictTitle,
-} from "@/modules/diagnostics";
+import { ConsequenceChip, useLatestIncident, VerdictGlyph } from "@/modules/diagnostics";
 
 import { Tile } from "./Tile";
 
@@ -24,7 +19,7 @@ export function LastGameTile() {
       <div className="flex flex-col gap-2">
         <p className="flex items-center gap-1.5 text-sm font-medium text-surface-100 select-text">
           <VerdictGlyph kind={latest.verdict.kind} className="size-4 shrink-0" />
-          {verdictTitle(latest)}
+          {latest.verdict.title}
         </p>
         <div className="flex items-center gap-2 text-xs text-surface-400 select-none">
           <time dateTime={latest.endedAt}>

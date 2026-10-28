@@ -152,7 +152,6 @@ fn slug(kind: VerdictKind) -> &'static str {
         VerdictKind::InjectionHostFailed => "injection-host-failed",
         VerdictKind::PatcherOutOfDate => "patcher-out-of-date",
         VerdictKind::ArchiveRejected => "archive-rejected",
-        VerdictKind::SkinhackDetected => "skinhack-detected",
         VerdictKind::OverlayDisabled => "overlay-disabled",
         VerdictKind::Unmodded => "unmodded",
         VerdictKind::MissingData => "missing-data",
@@ -335,23 +334,7 @@ fn seeds() -> Vec<Seed> {
             r.redirected.clear();
             r
         }),
-        (VerdictKind::SkinhackDetected, |mut r| {
-            r.scan_failures = vec![WadScanFailure {
-                wad: Some("Graves.wad.client".to_string()),
-                status: "c0000229".to_string(),
-            }];
-            r.overlay = OverlayOutcome::Disabled;
-            r.redirected.clear();
-            r.timeline.push(line(
-                r.started_at,
-                EvidenceSource::Dll,
-                "scan rejected Graves.wad.client, status c0000229",
-            ));
-            r
-        }),
         (VerdictKind::ArchiveRejected, |mut r| {
-            // A rejection the scan did not call a skinhack, so the two kinds
-            // can be told apart on screen.
             r.scan_failures = vec![WadScanFailure {
                 wad: Some("Ahri.wad.client".to_string()),
                 status: "c000003e".to_string(),
@@ -446,7 +429,7 @@ fn seeds() -> Vec<Seed> {
             r.scan = Some(ScanMode::Lazy);
             r.skipped = vec![SkippedArchive {
                 wad: "Ahri.wad.client".to_string(),
-                why: "anti-hack scan blocked (c0000229)".to_string(),
+                why: "archive scan failed (deadbeef)".to_string(),
             }];
             r.log = Some(log(LOADED));
             r.ending = Ending {

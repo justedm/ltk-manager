@@ -10,7 +10,6 @@ import {
   formatClock,
   formatDuration,
   formatOrigin,
-  isSkinhackRejection,
   subjectLine,
 } from "../utils/incident";
 import { VerdictGlyph } from "./VerdictGlyph";
@@ -141,7 +140,6 @@ function metaLine(incident: Incident): string {
  */
 function IncidentRow({ incident, selected, onSelect, ref }: IncidentRowProps) {
   const subtitle = subjectLine(incident);
-  const skinhack = isSkinhackRejection(incident);
 
   return (
     <button
@@ -163,18 +161,10 @@ function IncidentRow({ incident, selected, onSelect, ref }: IncidentRowProps) {
       )}
     >
       {/* Glyphs take the -text variant: DS-TEXT. */}
-      <VerdictGlyph
-        kind={incident.verdict.kind}
-        className={twMerge("mt-0.5 size-3.5 shrink-0", skinhack && "text-void-text")}
-      />
+      <VerdictGlyph kind={incident.verdict.kind} className="mt-0.5 size-3.5 shrink-0" />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="flex items-baseline gap-2">
-          <span
-            className={twMerge(
-              "min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-surface-100",
-              skinhack && "text-void-text",
-            )}
-          >
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-surface-100">
             {incident.verdict.title}
           </span>
           <span className="shrink-0 font-mono text-meta text-surface-500 tabular-nums">

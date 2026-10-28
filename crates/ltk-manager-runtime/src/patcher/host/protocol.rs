@@ -39,9 +39,8 @@ pub mod hook_flags {
     /// `CSLOL_HOOK_DISABLE_FILE` - disable the filesystem overlay, so no modded
     /// files are redirected into the game.
     pub const DISABLE_FILE: u32 = 2;
-    /// `CSLOL_HOOK_OPT_OUT_AH_V1` - opt out of anti-skinhack v1 enforcement: a
-    /// failed WAD scan is downgraded from a blocking error to a warning, so
-    /// patching proceeds instead of aborting.
+    /// `CSLOL_HOOK_OPT_OUT_AH_V1` - let WAD scan failures through without
+    /// blocking patching.
     pub const OPT_OUT_AH_V1: u32 = 4;
     /// Force the anti-hack WAD scan over every archive up front, instead of the
     /// DLL's default of verifying each one as the game loads it. The way the
@@ -314,7 +313,7 @@ mod tests {
         // Real host output uses uppercase level keywords; the level must be split
         // off so the scan-failure phrase survives verbatim in `message`.
         let event = parse_event(
-            "dll 64.6055036 11776 24292 ERROR ltk_patcher_dll::verify: WAD scan failed status with c0000229 for briar.wad.client",
+            "dll 64.6055036 11776 24292 ERROR ltk_patcher_dll::verify: WAD scan failed status with deadbeef for briar.wad.client",
         )
         .unwrap();
         match event {
@@ -330,7 +329,7 @@ mod tests {
                 assert_eq!(level, "ERROR");
                 assert_eq!(
                     message,
-                    "ltk_patcher_dll::verify: WAD scan failed status with c0000229 for briar.wad.client"
+                    "ltk_patcher_dll::verify: WAD scan failed status with deadbeef for briar.wad.client"
                 );
             }
             _ => panic!("Expected DllLog event"),

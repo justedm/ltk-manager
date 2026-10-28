@@ -59,7 +59,6 @@ This table holds every major feature of Mod health. A status word has one meanin
 | Verdict pruning       | Available | A sweep forgets the verdicts of mods the library dropped                               |
 | The full findings     | Planned   | Behind a disclosure, for the user who wants the detail                                 |
 | Missing linked object | Available | `bin/object-link` replaces the missing-dependency badge, toast and dialog              |
-| One health surface    | Proposed  | The skinhack warning joins the badge                                                   |
 
 ## The verdict
 

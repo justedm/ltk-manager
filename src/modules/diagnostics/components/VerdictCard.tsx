@@ -1,9 +1,7 @@
-import skinhackMark from "@/assets/game/skinhack.png";
 import { m } from "@/i18n";
 import type { Incident } from "@/lib/tauri";
-import { twMerge } from "@/utils";
 
-import { isSkinhackRejection, verdictCause, verdictTitle } from "../utils/incident";
+import { verdictCause } from "../utils/incident";
 import { ConsequenceChip } from "./ConsequenceChip";
 import { VerdictGlyph } from "./VerdictGlyph";
 
@@ -14,44 +12,17 @@ interface VerdictCardProps {
 /** The verdict as the player reads it first: the title, what it cost, and the cause. */
 export function VerdictCard({ incident }: VerdictCardProps) {
   const { verdict } = incident;
-  const skinhack = isSkinhackRejection(incident);
-  const title = verdictTitle(incident);
 
   return (
     <section
       data-ui="VerdictCard"
-      className={twMerge(
-        "flex items-start rounded-lg border border-surface-700/50 bg-surface-900/95",
-        /* The hue names the kind rather than a status: DS-KIND-HUE. */
-        skinhack && "border-void/50 bg-linear-to-r from-void/20 via-void/10 to-void/5",
-      )}
+      className="flex items-start rounded-lg border border-surface-700/50 bg-surface-900/95"
     >
-      {skinhack && (
-        <img
-          data-ui="VerdictCard:skinhack-mark"
-          src={skinhackMark}
-          alt=""
-          draggable={false}
-          className="m-1 size-40 shrink-0 self-center select-none"
-        />
-      )}
-      {/* The art supplies the left inset when it is there, so only a card
-          without it needs padding of its own on that side. */}
-      <div className={twMerge("min-w-0 flex-1 px-2 py-4", !skinhack && "p-4")}>
+      <div className="min-w-0 flex-1 p-4">
         <div className="flex flex-wrap items-center gap-2">
           {/* Glyphs take the -text variant: DS-TEXT. */}
-          <VerdictGlyph
-            kind={verdict.kind}
-            className={twMerge("mt-0.5 size-5 shrink-0", skinhack && "text-void-text")}
-          />
-          <h2
-            className={twMerge(
-              "text-base font-semibold text-surface-100",
-              skinhack && "text-void-text",
-            )}
-          >
-            {title}
-          </h2>
+          <VerdictGlyph kind={verdict.kind} className="mt-0.5 size-5 shrink-0" />
+          <h2 className="text-base font-semibold text-surface-100">{verdict.title}</h2>
           <ConsequenceChip consequence={verdict.consequence} />
           {incident.dismissed && (
             <span className="inline-flex h-5 items-center rounded-sm border border-surface-600 px-1.5 text-fine font-medium tracking-wider text-surface-400 uppercase">

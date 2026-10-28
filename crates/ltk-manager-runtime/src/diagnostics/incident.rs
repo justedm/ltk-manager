@@ -12,7 +12,8 @@ use std::sync::LazyLock;
 
 use chrono::{DateTime, Local, Utc};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::binary_id::PatcherBinaries;
 use super::exit_status;
@@ -214,9 +215,10 @@ impl ClientReason {
 }
 
 /// Which failure the classifier named.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, strum::EnumString)]
 #[cfg_attr(feature = "ts", derive(specta::Type))]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum VerdictKind {
     /// The DLL never attached, which is the common startup failure.
     PatcherDidNotRun,
@@ -226,9 +228,6 @@ pub enum VerdictKind {
     InjectionHostFailed,
     PatcherOutOfDate,
     ArchiveRejected,
-    /// The scan rejected an archive for a Riot skin ported onto a base
-    /// champion, which is the rejection a player has a word for.
-    SkinhackDetected,
     OverlayDisabled,
     Unmodded,
     MissingData,
@@ -243,6 +242,20 @@ pub enum VerdictKind {
     WrongInstall,
     /// A shader did not compile, or a material had no pipeline to draw with.
     ShaderFailed,
+}
+
+impl<'de> Deserialize<'de> for VerdictKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let kind = String::deserialize(deserializer)?;
+        if kind == "skinhack-detected" {
+            return Ok(Self::ArchiveRejected);
+        }
+
+        kind.parse().map_err(D::Error::custom)
+    }
 }
 
 /// What a verdict cost the player, which is a fact whatever the manager makes
@@ -748,7 +761,6 @@ impl VerdictKind {
             Self::StuckLoading => 11,
             Self::ArchiveSkipped => 12,
             Self::EndedWithoutReason => 13,
-            Self::SkinhackDetected => 14,
             Self::OverlayBuildFailed => 15,
             Self::InjectionHostFailed => 16,
             Self::WrongInstall => 17,
@@ -772,7 +784,6 @@ impl VerdictKind {
             11 => Self::StuckLoading,
             12 => Self::ArchiveSkipped,
             13 => Self::EndedWithoutReason,
-            14 => Self::SkinhackDetected,
             15 => Self::OverlayBuildFailed,
             16 => Self::InjectionHostFailed,
             17 => Self::WrongInstall,
@@ -793,7 +804,6 @@ impl VerdictKind {
             Self::InjectionHostFailed => "Injection Host Failure",
             Self::PatcherOutOfDate => "Unsupported Game Build",
             Self::ArchiveRejected => "Archive Scan Rejection",
-            Self::SkinhackDetected => "Skinhack Detection",
             Self::OverlayDisabled => "Overlay Verification Failure",
             Self::Unmodded => "No Mods Applied",
             Self::MissingData => "Missing Game Data",
@@ -820,7 +830,6 @@ impl VerdictKind {
             | Self::InjectionHostFailed
             | Self::PatcherOutOfDate
             | Self::ArchiveRejected
-            | Self::SkinhackDetected
             | Self::OverlayDisabled
             | Self::Unmodded => Consequence::OverlayOff,
             Self::MissingData
@@ -949,24 +958,31 @@ impl Ending {
 impl Incident {
     /// Brings a stored incident up to what this build would have written.
     ///
-    /// Titles and consequences already derive from the kind, so the only thing
-    /// left to move is the kind itself when a later build split one in two.
+    /// Titles and consequences derive from the kind, and retired scan statuses
+    /// read as unknown archive rejections.
     pub(super) fn migrate(&mut self) {
         self.backfill_scan_status();
-        self.promote_skinhack();
-    }
+        let retired_title = self
+            .verdict
+            .title_override
+            .as_deref()
+            .is_some_and(|title| title.to_ascii_lowercase().contains("skinhack"));
+        let retired_cause = self.verdict.cause.to_ascii_lowercase().contains("skinhack");
 
-    /// A rejection the scan called a skinhack is its own kind now.
-    ///
-    /// Without this a stored incident keeps reading as a plain rejection, and
-    /// the list shows the same event under two names.
-    fn promote_skinhack(&mut self) {
         if self.verdict.kind == VerdictKind::ArchiveRejected
-            && self.scan_status == Some(ScanStatus::Skinhack)
+            && (self.scan_status == Some(ScanStatus::Unknown) || retired_title || retired_cause)
         {
-            self.verdict.kind = VerdictKind::SkinhackDetected;
-            if self.verdict.title_override.is_none() {
+            self.verdict.cause.clear();
+            if retired_title {
+                self.verdict.title_override = None;
                 self.verdict.title = self.verdict.kind.title().to_string();
+            }
+            if self
+                .scan_status_code
+                .as_deref()
+                .is_some_and(is_retired_skinhack_status)
+            {
+                self.scan_status_code = None;
             }
         }
     }
@@ -1030,6 +1046,14 @@ impl Incident {
         let ended = DateTime::parse_from_rfc3339(&self.ended_at).ok()?;
         u32::try_from((ended - started).num_seconds()).ok()
     }
+}
+
+fn is_retired_skinhack_status(status: &str) -> bool {
+    let status = status.trim();
+    status
+        .strip_prefix("0x")
+        .unwrap_or(status)
+        .eq_ignore_ascii_case("c0000229")
 }
 
 /// Why a suspect is one, as the line under its name.
@@ -1166,12 +1190,10 @@ impl ClassifyContext<'_> {
 /// Carried on the [`Incident`] so a consumer can tell one rejection from
 /// another without reading [`Verdict::cause`] as prose, and sent beside the raw
 /// code on `patcher-wad-scan-failed` so the dialog keeps no second table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(specta::Type))]
 #[serde(rename_all = "kebab-case")]
 pub enum ScanStatus {
-    /// An official Riot skin ported onto a base champion.
-    Skinhack,
     /// A linked `.bin` the archive needs is absent.
     MissingBin,
     /// Unreadable, or built for an unsupported version.
@@ -1190,16 +1212,25 @@ pub enum ScanStatus {
     Unknown,
 }
 
+impl<'de> Deserialize<'de> for ScanStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let status = String::deserialize(deserializer)?;
+        Ok(Self::parse(&status))
+    }
+}
+
 impl ScanStatus {
-    /// The status for the code the scan reported, `c0000229` or `0xC0000229`
-    /// alike, and [`Self::Unknown`] for one this build has no name for.
+    /// The status for the code the scan reported, and [`Self::Unknown`] for one
+    /// this build has no name for.
     ///
     /// Some verdicts are the DLL's own rather than the game's and have no NT
     /// code to borrow, so they name a word instead. Both kinds land here.
     pub fn parse(status: &str) -> Self {
         let code = status.trim().to_ascii_lowercase();
         match code.strip_prefix("0x").unwrap_or(&code) {
-            "c0000229" => Self::Skinhack,
             "c0000225" => Self::MissingBin,
             "c000003e" => Self::Corrupt,
             "c0000017" | "c000009a" => Self::OutOfMemory,
@@ -1208,6 +1239,11 @@ impl ScanStatus {
             // would split a player's history in two across the upgrade.
             "base_skin" | "mod_wad" => Self::BaseSkin,
             "base_wad" => Self::BaseWad,
+            "missing-bin" => Self::MissingBin,
+            "corrupt" => Self::Corrupt,
+            "out-of-memory" => Self::OutOfMemory,
+            "base-skin" => Self::BaseSkin,
+            "base-wad" => Self::BaseWad,
             _ => Self::Unknown,
         }
     }
@@ -1229,24 +1265,12 @@ impl ScanStatus {
         Some(status.trim())
     }
 
-    /// The verdict kind this status reaches.
-    ///
-    /// A skinhack is its own kind rather than a shade of a rejection, so the
-    /// title, the hue and the token all follow from one field.
-    fn kind(self) -> VerdictKind {
-        match self {
-            Self::Skinhack => VerdictKind::SkinhackDetected,
-            _ => VerdictKind::ArchiveRejected,
-        }
-    }
-
     /// What to try about this status, as the verdict's first hint.
     ///
     /// Every status reaches one. A rejection a player cannot act on is the same
     /// dead end whichever code produced it.
     fn hint(self) -> Hint {
         match self {
-            Self::Skinhack => Hint::RemoveSkinhack,
             Self::MissingBin | Self::Corrupt | Self::BaseSkin => Hint::ReimportMod,
             Self::OutOfMemory => Hint::FreeMemory,
             Self::BaseWad => Hint::RepairGame,
@@ -1361,9 +1385,12 @@ fn is_champion_archive(basename: &str) -> bool {
 ///
 /// A code on the wire and in the store. The frontend catalog owns the sentence
 /// (ADR-0017), and the report text takes the sentences from there.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, strum::EnumIter)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, strum::EnumIter, strum::EnumString,
+)]
 #[cfg_attr(feature = "ts", derive(specta::Type))]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum Hint {
     SystemChecks,
     UpdateManager,
@@ -1378,7 +1405,6 @@ pub enum Hint {
     ScanUpFront,
     CopyReport,
     DisableSuspect,
-    RemoveSkinhack,
     ReimportMod,
     RepairGame,
     Elevate,
@@ -1391,6 +1417,20 @@ pub enum Hint {
     /// A shader failed with no programs named, which a shader definition
     /// outside the game's shaders bin reads as.
     ShaderDefinition,
+}
+
+impl<'de> Deserialize<'de> for Hint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hint = String::deserialize(deserializer)?;
+        if hint == "remove-skinhack" {
+            return Ok(Self::CopyReport);
+        }
+
+        hint.parse().map_err(D::Error::custom)
+    }
 }
 
 impl Hint {
@@ -1410,7 +1450,6 @@ impl Hint {
             Self::ScanUpFront => 11,
             Self::CopyReport => 12,
             Self::DisableSuspect => 13,
-            Self::RemoveSkinhack => 14,
             Self::ReimportMod => 15,
             Self::RepairGame => 16,
             Self::Elevate => 17,

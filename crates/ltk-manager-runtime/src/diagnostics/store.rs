@@ -275,7 +275,9 @@ fn ended_at_of(text: &str) -> DateTime<Utc> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostics::incident::{Consequence, ScanStatus, Verdict, VerdictKind, fixtures};
+    use crate::diagnostics::incident::{
+        Consequence, Hint, ScanStatus, Verdict, VerdictKind, fixtures,
+    };
 
     fn store(keep: usize) -> (tempfile::TempDir, IncidentStore) {
         let dir = tempfile::tempdir().unwrap();
@@ -401,7 +403,7 @@ mod tests {
         let (_dir, store) = store(50);
         let mut incident = fixtures::incident("old", "2026-08-21T10:00:00+00:00");
         incident.scan_status = None;
-        incident.evidence[0].line = "scan rejected graves.wad.client, status c0000229".to_string();
+        incident.evidence[0].line = "scan rejected graves.wad.client, status c0000225".to_string();
         store.record(&incident).unwrap();
 
         let mut stored = serde_json::from_slice::<serde_json::Value>(
@@ -416,10 +418,10 @@ mod tests {
         .unwrap();
 
         let read = store.get("old").unwrap().unwrap();
-        assert_eq!(read.scan_status, Some(ScanStatus::Skinhack));
+        assert_eq!(read.scan_status, Some(ScanStatus::MissingBin));
         assert_eq!(
             store.list().unwrap()[0].scan_status,
-            Some(ScanStatus::Skinhack)
+            Some(ScanStatus::MissingBin)
         );
     }
 
@@ -454,22 +456,36 @@ mod tests {
         assert_eq!(store.list().unwrap().len(), 1);
     }
 
-    /// The screen this exists for: a stored rejection the scan called a skinhack
-    /// read as a plain rejection under its old title, so the list showed the
-    /// same event twice under two names.
+    /// A retired scan status reads as an unknown archive rejection.
     #[test]
-    fn a_stored_skinhack_reads_as_one_whatever_it_was_filed_as() {
+    fn a_stored_retired_scan_status_reads_as_unknown() {
         let (_dir, store) = store(50);
-        let mut incident = fixtures::incident("old", "2026-08-21T10:00:00+00:00");
-        incident.verdict.kind = VerdictKind::ArchiveRejected;
-        incident.verdict.title = "An archive was rejected".to_string();
-        incident.scan_status = Some(ScanStatus::Skinhack);
-        store.record(&incident).unwrap();
+        store
+            .record(&fixtures::incident("old", "2026-08-21T10:00:00+00:00"))
+            .unwrap();
 
-        let read = store.get("old").unwrap().expect("the old file reads");
-        assert_eq!(read.verdict.kind, VerdictKind::SkinhackDetected);
-        assert_eq!(read.verdict.title, "Skinhack Detection");
-        assert_eq!(store.list().unwrap()[0].verdict.title, "Skinhack Detection");
+        let path = store.dir().join("old.json");
+        let mut stored =
+            serde_json::from_slice::<serde_json::Value>(&fs::read(&path).unwrap()).unwrap();
+        stored["verdict"]["kind"] = serde_json::json!("skinhack-detected");
+        stored["verdict"]["cause"] =
+            serde_json::json!("The scan found a skinhack in graves.wad.client.");
+        stored["verdict"]["hints"] = serde_json::json!(["remove-skinhack"]);
+        stored["scanStatus"] = serde_json::json!("skinhack");
+        stored["scanStatusCode"] = serde_json::json!("0xC0000229");
+        fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+
+        let read = store.get("old").unwrap().expect("the file reads");
+        assert_eq!(read.verdict.kind, VerdictKind::ArchiveRejected);
+        assert_eq!(read.verdict.title, "Archive Scan Rejection");
+        assert!(read.verdict.cause.is_empty());
+        assert_eq!(read.verdict.hints, [Hint::CopyReport]);
+        assert_eq!(read.scan_status, Some(ScanStatus::Unknown));
+        assert_eq!(read.scan_status_code, None);
+        assert_eq!(
+            store.list().unwrap()[0].verdict.title,
+            "Archive Scan Rejection"
+        );
     }
 
     /// A title from the kind is never stored, so renaming a kind renames every
@@ -522,7 +538,7 @@ mod tests {
     fn a_recovery_declines_when_the_rejections_disagree() {
         let mut incident = fixtures::incident("mixed", "2026-08-21T10:00:00+00:00");
         incident.scan_status = None;
-        incident.evidence[0].line = "scan rejected graves.wad.client, status c0000229".to_string();
+        incident.evidence[0].line = "scan rejected graves.wad.client, status c0000225".to_string();
         incident.evidence[1].line = "scan rejected ahri.wad.client, status c000003e".to_string();
 
         incident.migrate();

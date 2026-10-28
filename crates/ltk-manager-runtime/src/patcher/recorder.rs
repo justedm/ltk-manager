@@ -500,7 +500,7 @@ mod tests {
         recorder.observe(&InjectorEvent::GameAttached { pid: Some(1) }, at(2));
         let failures = vec![WadScanFailure {
             wad: Some("Ahri.wad.client".to_string()),
-            status: "c0000229".to_string(),
+            status: "deadbeef".to_string(),
         }];
         recorder.observe(
             &InjectorEvent::WadScanFailed {
@@ -519,7 +519,7 @@ mod tests {
             record
                 .timeline
                 .iter()
-                .any(|e| e.line == "scan rejected Ahri.wad.client, status c0000229")
+                .any(|e| e.line == "scan rejected Ahri.wad.client, status deadbeef")
         );
     }
 

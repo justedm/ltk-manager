@@ -21,8 +21,8 @@ use ltk_manager_runtime::patcher::PatcherPhase;
 pub struct WadScanFailureInfo {
     /// The offending archive (e.g. `TahmKench.wad.client`), if its name parsed.
     pub wad: Option<String>,
-    /// The code the scan reported, an NTSTATUS-style one the game raised
-    /// (`c0000229`), or a word the DLL's own checks named (`mod_wad`).
+    /// The code the scan reported, or a word the DLL's own checks named
+    /// (`mod_wad`).
     pub status: String,
     /// What [`ScanStatus::parse`] makes of `status`, so the dialog reads a
     /// rejection the way the Games tab does instead of keeping a second table.

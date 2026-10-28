@@ -1,4 +1,4 @@
-import { AlertTriangle, FileWarning, type LucideIcon, PackageX, ShieldAlert } from "lucide-react";
+import { AlertTriangle, FileWarning, type LucideIcon, PackageX } from "lucide-react";
 
 import type { Incident, ScanStatus } from "@/lib/tauri";
 
@@ -18,13 +18,6 @@ export interface ScanStatusMessage {
  * both read it, which is what keeps them from wording one event two ways.
  */
 export const SCAN_STATUS_MESSAGES: Readonly<Record<ScanStatus, ScanStatusMessage>> = {
-  skinhack: {
-    title: "Skinhack detected",
-    icon: ShieldAlert,
-    tone: "red",
-    lead: "The patcher's safety scan found a skinhack (an official Riot skin ported onto a base champion) among your enabled mods. To avoid crashing your game, the patcher was stopped and no mods were applied this session.",
-    fix: "Remove or disable the offending mod(s), then start the patcher again.",
-  },
   "missing-bin": {
     title: "A mod is incomplete",
     icon: PackageX,
@@ -71,7 +64,6 @@ export const SCAN_STATUS_MESSAGES: Readonly<Record<ScanStatus, ScanStatusMessage
 
 /** The status in a few words, for a field that has already been labelled. */
 export const SCAN_STATUS_LABELS: Readonly<Record<ScanStatus, string>> = {
-  skinhack: "skinhack",
   "missing-bin": "a linked .bin is missing",
   corrupt: "corrupt or unsupported",
   "out-of-memory": "out of memory mid-scan",
@@ -81,14 +73,11 @@ export const SCAN_STATUS_LABELS: Readonly<Record<ScanStatus, string>> = {
 };
 
 /**
- * Choose which status drives a burst's copy. A skinhack is the most serious and
- * always wins. A uniform burst uses its single status, and a mix of different
- * non-skinhack causes falls back to the generic copy so we never show one
- * cause's fix for a different cause's failure.
+ * Chooses the status that drives a burst's copy. A uniform burst uses its
+ * single status, and a mix of different causes falls back to generic copy.
  */
 export function pickPrimaryStatus(statuses: ScanStatus[]): ScanStatus {
   const unique = [...new Set(statuses)];
-  if (unique.includes("skinhack")) return "skinhack";
   if (unique.length === 1) return unique[0] ?? "unknown";
   return "unknown";
 }

@@ -1631,9 +1631,8 @@ three specimens.
 **Evidence.** One `Ziggs.wad.client` chunk inside a Sett mod. Two map-WAD chunks inside a Kaisa
 mod. Both measured.
 
-**Detected today.** No. The former author-and-description blocklist is removed. Runtime
-`ScanStatus::Skinhack` (`crates/ltk-manager-runtime/src/diagnostics/incident.rs`) remains a
-diagnostic classification for scanner reports. Neither inspects mod content.
+**Detected today.** No. The author-and-description blocklist and dedicated scanner status
+classification are removed. Runtime does not inspect mod content.
 
 **Repairable.** Nothing to repair — `route_targets` already sends the Ziggs chunk into
 `Ziggs.wad.client`, and `wad-reports.json` records that it did. The value is entirely in the
